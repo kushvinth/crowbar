@@ -1,0 +1,1052 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>A CVE index inside your codebase | crowbar</title>
+    <meta
+      name="description"
+      content="Retrieve CVEs and index them inside your codebase. Crowbar pulls NVD, KEV, EPSS, advisories and exploit code into a local SQLite index you query while you work. One CLI, one MCP server, no API calls."
+    />
+    <!-- prettier-ignore -->
+    <link rel="canonical" href="https://crowbar.kushvinth.com/" />
+    <!-- prettier-ignore -->
+    <meta property="og:type" content="website" />
+    <!-- prettier-ignore -->
+    <meta property="og:site_name" content="crowbar" />
+    <!-- prettier-ignore -->
+    <meta property="og:title" content="A CVE index inside your codebase | crowbar" />
+    <!-- prettier-ignore -->
+    <meta property="og:description" content="Retrieve CVEs and index them inside your codebase. Crowbar pulls NVD, KEV, EPSS, advisories and exploit code into a local SQLite index you query while you work." />
+    <!-- prettier-ignore -->
+    <meta property="og:url" content="https://crowbar.kushvinth.com/" />
+    <!-- prettier-ignore -->
+    <meta property="og:image" content="https://crowbar.kushvinth.com/assets/social-card.png" />
+    <!-- prettier-ignore -->
+    <meta property="og:image:type" content="image/png" />
+    <!-- prettier-ignore -->
+    <meta property="og:image:width" content="1200" />
+    <!-- prettier-ignore -->
+    <meta property="og:image:height" content="630" />
+    <!-- prettier-ignore -->
+    <meta
+      property="og:image:alt"
+      content="crowbar. Retrieve CVEs and index them inside your codebase."
+    />
+    <!-- prettier-ignore -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <!-- prettier-ignore -->
+    <meta name="twitter:title" content="A CVE index inside your codebase | crowbar" />
+    <!-- prettier-ignore -->
+    <meta name="twitter:description" content="Retrieve CVEs and index them inside your codebase. Crowbar pulls NVD, KEV, EPSS, advisories and exploit code into a local SQLite index you query while you work." />
+    <!-- prettier-ignore -->
+    <meta name="twitter:image" content="https://crowbar.kushvinth.com/assets/social-card.png" />
+    <!-- prettier-ignore -->
+    <meta
+      name="twitter:image:alt"
+      content="crowbar. Retrieve CVEs and index them inside your codebase."
+    />
+    <!-- website:theme:start -->
+    <meta name="theme-color" content="#ffffff" />
+    <!-- Apply the saved theme before styles load, to avoid a flash on navigation. -->
+    <script src="assets/theme.js"></script>
+    <!-- website:theme:end -->
+    <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="assets/styles.css" />
+    <script src="assets/main.js" defer></script>
+    <script type="module" src="assets/home.js"></script>
+  </head>
+  <body class="home-page" id="top">
+    <a class="skip-link" href="#main">Skip to content</a>
+
+    <!-- website:header:start -->
+    <!-- prettier-ignore -->
+    <header class="site-header">
+      <div class="container header-inner">
+        <a class="brand" href="./" aria-label="crowbar home"
+          ><span class="brand-name">crowbar</span
+          ><span class="brand-caption" data-i18n-skip>A CVE index inside your codebase</span></a
+        >
+        <nav class="navigation" aria-label="Main navigation">
+          <a href="./get-started/" class="nav-start">Get started</a>
+          <a href="./showcase/">Showcase</a>
+          <a href="./guides/">Guides</a>
+          <a href="./faq/">FAQ</a>
+        </nav>
+        <div class="header-social">
+          <button class="theme-toggle" type="button" data-theme-toggle hidden>
+            <svg class="theme-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+              <path d="M20.9 13a9 9 0 0 1-9.9-9.9A9 9 0 1 0 20.9 13Z" />
+            </svg>
+            <svg class="theme-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+              <circle cx="12" cy="12" r="4" />
+              <path d="M12 2v2m0 16v2M2 12h2m16 0h2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42" />
+            </svg>
+          </button>
+          <a
+            class="nav-github"
+            href="https://github.com/kushvinth/crowbar"
+            aria-label="crowbar on GitHub"
+            title="crowbar on GitHub"
+          >
+            <svg
+              width="22"
+              height="22"
+              viewBox="0 0 16 16"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path
+                fill="currentColor"
+                d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.65 7.65 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"
+              />
+            </svg>
+            <span class="nav-github-count" hidden aria-hidden="true"></span>
+          </a>
+          <a
+            class="nav-pypi"
+            href="https://pypi.org/project/crowbar-cli/"
+            aria-label="crowbar on PyPI"
+            title="crowbar on PyPI"
+            >PyPI</a
+          >
+        </div>
+      </div>
+    </header>
+    <!-- website:header:end -->
+
+    <details class="home-page-nav" data-home-nav open>
+      <summary class="container">
+        <span>On this page</span>
+        <span class="home-nav-current" data-home-nav-current aria-hidden="true"
+          >Set up crowbar</span
+        >
+        <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+          <path d="m2 4 4 4 4-4" fill="none" stroke="currentColor" />
+        </svg>
+      </summary>
+      <nav class="home-nav-links" aria-label="On this page">
+        <div class="container">
+          <p class="home-nav-title">On this page</p>
+          <ul>
+            <li><a href="#setup" aria-current="location">Set up crowbar</a></li>
+            <li><a href="#how-it-works">How it works</a></li>
+            <li><a href="#triage">Triage a CVE</a></li>
+            <li><a href="#versions">Match a version</a></li>
+            <li><a href="#sources">Every source</a></li>
+            <li><a href="#questions">Choose your question</a></li>
+            <li><a href="#install">Install</a></li>
+            <li><a href="#guardrails">Guardrails</a></li>
+            <li><a href="#community">Questions</a></li>
+          </ul>
+        </div>
+      </nav>
+    </details>
+
+    <main id="main">
+      <section class="container hero home-hero" id="setup">
+        <div class="home-start-grid">
+          <div>
+            <p class="eyebrow">Retrieve CVEs. Index them locally.</p>
+            <h1>Stop guessing<br />at CVEs.</h1>
+            <p class="lede">
+              Point crowbar at your stack. It pulls the CVEs that apply, indexes
+              them locally, and hands your codebase a database you can query
+              while you work. No API calls, no rate limits.
+            </p>
+            <div class="actions">
+              <a class="button" href="get-started/">Get started</a>
+              <a class="text-link" href="#triage">See a real triage ↓</a>
+            </div>
+            <div class="home-reading-links">
+              <p>
+                <a href="showcase/">Showcase →</a> for real triage sessions, step
+                by step.
+              </p>
+              <p>
+                <a href="guides/">Guides →</a> for CLI, MCP and index workflows.
+              </p>
+            </div>
+          </div>
+          <div class="home-setup" id="setup-panel">
+            <div class="home-setup-agent">
+              <h2>Set up crowbar</h2>
+              <p>Copy this into your coding agent:</p>
+              <div class="agent-terminal">
+                <div class="terminal-header">
+                  <span class="terminal-title"
+                    ><span class="terminal-dots" aria-hidden="true"
+                      ><i></i><i></i><i></i></span
+                    >Your coding agent</span
+                  >
+                  <button
+                    class="copy-button"
+                    type="button"
+                    data-copy="home-install-prompt"
+                    aria-label="Copy crowbar installation prompt"
+                  >
+                    Copy
+                  </button>
+                </div>
+                <p class="terminal-prompt">
+                  <span class="prompt-symbol" aria-hidden="true">›</span
+                  ><span id="home-install-prompt"
+                    >Install crowbar and connect it to this coding agent using
+                    <span translate="no">npx crowbar-cli@latest setup</span>.
+                    Show me the setup plan for approval, then verify the
+                    installation.</span
+                  ><span class="terminal-cursor" aria-hidden="true"></span>
+                </p>
+              </div>
+            </div>
+            <div class="home-setup-command">
+              <p>Or run this in your terminal:</p>
+              <div class="code-block code-inline">
+                <code id="setup-command">npx crowbar-cli@latest setup</code>
+                <button
+                  class="copy-button"
+                  type="button"
+                  data-copy="setup-command"
+                  aria-label="Copy setup command"
+                >
+                  Copy
+                </button>
+              </div>
+              <p class="caption">
+                Approve the setup plan, then restart your agent.
+              </p>
+              <nav class="home-install-resources" aria-label="Setup options">
+                <span>Setup for your platform:</span>
+                <a href="get-started/#node-windows-help"
+                  ><span translate="no">Windows (PowerShell)</span></a
+                >
+                <a href="get-started/#node-macos-help"
+                  ><span translate="no">macOS</span></a
+                >
+                <a href="get-started/#node-linux-help"
+                  ><span translate="no">Linux</span></a
+                >
+              </nav>
+              <p class="home-other-install-options">
+                Other install options:
+                <a href="get-started/#uv-installation"
+                  ><span translate="no">uvx</span> →</a
+                >
+              </p>
+              <p class="home-expert-shortcut">
+                First time, or missing <span translate="no">Node.js</span> or a
+                coding agent?
+                <a href="get-started/">Follow the step-by-step setup guide →</a>
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="how-it-works">
+        <div class="container">
+          <div class="section-heading">
+            <h2>How it works</h2>
+          </div>
+          <p class="lede">
+            Vulnerability intelligence means knowing which vulnerabilities apply
+            to what you actually run. Crowbar retrieves that data and indexes
+            it locally, so your codebase can query it instead of guessing.
+          </p>
+          <ol class="home-workflow" id="how-crowbar-helps">
+            <li>
+              <h3>Point at your stack</h3>
+              <p>Give crowbar a product, a version and a question.</p>
+            </li>
+            <li>
+              <h3>Crowbar retrieves and indexes</h3>
+              <p>
+                It pulls real CPE ranges, KEV and EPSS scores, advisories and
+                proof-of-concept metadata into a local database.
+              </p>
+            </li>
+            <li>
+              <h3>Query it from your codebase</h3>
+              <p>
+                You ask for the CVEs that apply, and crowbar answers from the
+                index it just built.
+              </p>
+            </li>
+          </ol>
+          <details class="home-evidence-details">
+            <summary>See the difference between recall and lookup</summary>
+            <p class="comparison-question">
+              Which CVEs affect <span translate="no">nginx 1.18.0</span>?
+            </p>
+            <figure class="home-role-comparison">
+              <div class="manual-investigation">
+                <h3 class="comparison-label">Recall from memory</h3>
+                <div class="code-block">
+                  <div class="code-header">
+                    <span>What an agent usually answers</span>
+                  </div>
+                  <pre><code>I'm not certain, but nginx has had a few CVEs
+around that version. You might want to check
+CVE-2021-23017 and possibly some others.
+
+I'd also run a scan and read the changelog to be
+sure.</code></pre>
+                </div>
+                <p class="manual-work-summary">
+                  <strong
+                    >Uncertain, unverifiable, and impossible to act on.</strong
+                  >
+                </p>
+              </div>
+              <div class="agent-investigation" id="ask-your-agent">
+                <p class="comparison-label">Look it up with crowbar</p>
+                <div class="agent-terminal home-analysis-terminal">
+                  <div class="terminal-header">
+                    <span class="terminal-title"
+                      ><span class="terminal-dots" aria-hidden="true"
+                        ><i></i><i></i><i></i></span
+                      >Example prompt · nginx</span
+                    >
+                    <button
+                      class="copy-button"
+                      type="button"
+                      data-copy="how-it-works-prompt"
+                      aria-label="Copy nginx applicability prompt"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                  <p class="terminal-prompt">
+                    <span class="prompt-symbol" aria-hidden="true">›</span
+                    ><span id="how-it-works-prompt"
+                      >Use crowbar to index the CVEs that affect nginx 1.18.0,
+                      and tell me what to upgrade to.</span
+                    ><span class="terminal-cursor" aria-hidden="true"></span>
+                  </p>
+                  <div class="agent-reply">
+                    <p class="reply-label">
+                      Example answer · based on the findings
+                    </p>
+                    <p>
+                      Two CVEs affect that version.
+                      <strong>CVE-2021-23017</strong> is the one to patch. It
+                      matched the range
+                      <code>f5:nginx &gt;=0.6.18 &lt;1.20.1</code>.
+                    </p>
+                    <div class="agent-percent-rule">
+                      <code>matched f5:nginx &gt;=0.6.18 &lt;1.20.1</code
+                      ><span aria-hidden="true">↓</span
+                      ><strong>Upgrade to nginx 1.20.1 or later</strong>
+                    </div>
+                  </div>
+                </div>
+                <dl class="agent-evidence-roles">
+                  <div>
+                    <dt>crowbar returns</dt>
+                    <dd>
+                      The matched range, the severity, the exploitation signal
+                      and the fix version.
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>You get</dt>
+                    <dd>
+                      Which row to act on, what to upgrade to, and that the rest
+                      of the index does not apply to your version.
+                    </dd>
+                  </div>
+                </dl>
+              </div>
+              <figcaption>
+                One question, two answers. The second one names a version to
+                upgrade to.
+              </figcaption>
+            </figure>
+          </details>
+        </div>
+      </section>
+
+      <section class="section" id="triage">
+        <div class="container">
+          <p class="home-examples-intro">
+            Two questions your agent gets wrong every day: <em>is this CVE
+            real?</em> and <em>does it affect us?</em>
+          </p>
+          <div class="section-heading">
+            <p class="eyebrow">Example 01 · CVE triage</p>
+            <h2>Is Log4Shell worth patching?</h2>
+          </div>
+          <p class="lede">
+            You ask crowbar about CVE-2021-44228. It returns the record, the
+            risk signals and the proof-of-concept code that already exists, so
+            the answer is a decision and not a recap of a blog post.
+          </p>
+          <div class="home-example-grid">
+            <div class="home-case-story">
+              <h3>1. Ask about the CVE</h3>
+              <div class="agent-terminal home-analysis-terminal">
+                <div class="terminal-header">
+                  <span class="terminal-title"
+                    ><span class="terminal-dots" aria-hidden="true"
+                      ><i></i><i></i><i></i></span
+                    >Example prompt · Log4Shell</span
+                  >
+                  <button
+                    class="copy-button"
+                    type="button"
+                    data-copy="triage-analysis-prompt"
+                    aria-label="Copy Log4Shell triage prompt"
+                  >
+                    Copy
+                  </button>
+                </div>
+                <p class="terminal-prompt">
+                  <span class="prompt-symbol" aria-hidden="true">›</span
+                  ><span id="triage-analysis-prompt"
+                    >Use crowbar to triage CVE-2021-44228. Is it being
+                    exploited in the wild, how likely is it, and is there
+                    public proof-of-concept code?</span
+                  ><span class="terminal-cursor" aria-hidden="true"></span>
+                </p>
+              </div>
+              <h3>2. Read the signals</h3>
+              <p>
+                Crowbar ranks the signals before the score. A CVSS number alone
+                is not a risk verdict.
+              </p>
+              <dl class="percent-rules">
+                <div>
+                  <dt>Is it exploited?</dt>
+                  <dd>
+                    <span>CISA KEV and SSVC exploitation state.</span>
+                    <code>KEV · ssvc=active</code>
+                  </dd>
+                </div>
+                <div>
+                  <dt>How likely?</dt>
+                  <dd>
+                    <span>EPSS, the 30-day exploitation probability.</span>
+                    <code>epss 1.00</code>
+                  </dd>
+                </div>
+                <div>
+                  <dt>What is the impact?</dt>
+                  <dd>
+                    <span>CVSS, only once the other signals are known.</span>
+                    <code>CRIT 10.0</code>
+                  </dd>
+                </div>
+              </dl>
+            </div>
+            <div class="home-case-result">
+              <h3>3. Get the decision</h3>
+              <p>
+                crowbar answers with the fix, the evidence and the exploit code,
+                then tells you what it cannot know.
+              </p>
+              <figure class="output-figure">
+                <div class="code-block">
+                  <div class="code-header">
+                    <span>crowbar · CVE-2021-44228</span>
+                    <span>truncated</span>
+                  </div>
+                  <pre><code><span class="code-key">CVE-2021-44228  CRIT 10.0  KEV  epss 1.00  ssvc=active</span>
+affects  apache:log4j &gt;=2.0.1 &lt;2.3.1, &gt;=2.13.0 &lt;2.15.0
+KEV  added 2021-12-10  ransomware=Known
+Exploit-DB (3)   Nuclei (44)   Metasploit (4)   PoC repos (2)</code></pre>
+                </div>
+                <div class="agent-percent-rule">
+                  <code>exploited in the wild · patch now</code
+                  ><span aria-hidden="true">↓</span
+                  ><strong>Upgrade to log4j 2.17.1 or later</strong>
+                </div>
+                <figcaption>
+                  KEV is the strongest signal here, so it leads the answer.
+                </figcaption>
+              </figure>
+            </div>
+          </div>
+          <details class="home-evidence-details">
+            <summary>See the real crowbar output for CVE-2021-44228</summary>
+            <p class="caption">
+              Recorded from a local index. Crowbar never calls an API and never
+              answers from memory.
+            </p>
+            <div class="agent-terminal">
+              <div class="terminal-header">
+                <span class="terminal-title"
+                  ><span class="terminal-dots" aria-hidden="true"
+                    ><i></i><i></i><i></i></span
+                  >crowbar · live triage</span
+                >
+                <a
+                  class="copy-button"
+                  href="https://github.com/kushvinth/crowbar"
+                  aria-label="crowbar on GitHub"
+                  >Source</a
+                >
+              </div>
+              <div class="demo-player" data-demo-player="demo.cast"></div>
+            </div>
+          </details>
+          <details class="home-evidence-details">
+            <summary>See how each signal is read, one step at a time</summary>
+            <p class="comparison-question">
+              Which number decides the answer for
+              <span translate="no">CVE-2021-44228</span>?
+            </p>
+            <figure class="home-role-comparison">
+              <div class="manual-investigation step-comparison" data-step-comparison>
+                <h3 class="comparison-label">
+                  Read the record in the order crowbar ranks it
+                </h3>
+                <div
+                  class="step-selector expert-step-selector"
+                  role="group"
+                  aria-label="Read the crowbar record step by step"
+                >
+                  <button
+                    type="button"
+                    data-select-step="1"
+                    aria-pressed="true"
+                    aria-controls="expert-assembly expert-reasoning"
+                  >
+                    <span>01</span> Exploitation
+                  </button>
+                  <button
+                    type="button"
+                    data-select-step="2"
+                    aria-pressed="false"
+                    aria-controls="expert-assembly expert-reasoning"
+                  >
+                    <span>02</span> Likelihood
+                  </button>
+                  <button
+                    type="button"
+                    data-select-step="3"
+                    aria-pressed="false"
+                    aria-controls="expert-assembly expert-reasoning"
+                  >
+                    <span>03</span> Impact
+                  </button>
+                </div>
+                <div class="expert-analysis-grid">
+                  <details class="code-block expert-assembly" open>
+                    <summary class="code-header">
+                      <span>crowbar · selected fields</span>
+                      <span class="assembly-disclosure" aria-hidden="true"></span>
+                    </summary>
+                    <pre><code id="expert-assembly"><span class="code-step is-active" data-step="1">CVE-2021-44228  CRIT 10.0
+  KEV  added 2021-12-10  ransomware=Known
+  ssvc  exploitation=active</span>
+<span class="code-step" data-step="2">  epss  1.00  (30-day probability)
+  epss_pct  99.9%</span>
+<span class="code-step" data-step="3">  cvss  10.0  CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H</span></code></pre>
+                  </details>
+                  <aside class="expert-reasoning" aria-label="How to read the record">
+                    <div id="expert-reasoning" aria-live="polite" aria-atomic="true">
+                      <div class="expert-thought" data-step-note="1">
+                        <p class="thought-label">01 · Is it exploited?</p>
+                        <p>
+                          “It is in
+                          <strong>CISA KEV</strong> and SSVC says
+                          <strong>active</strong>. Someone is already doing it.”
+                        </p>
+                        <p class="expert-task">
+                          Check the exploitation signals before anything else.
+                        </p>
+                        <dl class="expert-facts">
+                          <div>
+                            <dt>KEV</dt>
+                            <dd>Listed</dd>
+                          </div>
+                          <div>
+                            <dt>ransomware</dt>
+                            <dd>Known</dd>
+                          </div>
+                        </dl>
+                      </div>
+                      <div class="expert-thought" data-step-note="2">
+                        <p class="thought-label">02 · How likely?</p>
+                        <p>
+                          “<strong>EPSS 1.00</strong> means exploitation is
+                          expected, not merely possible.”
+                        </p>
+                        <p class="expert-task">
+                          EPSS is a model estimate, so report it as probability.
+                        </p>
+                        <dl class="expert-facts">
+                          <div>
+                            <dt>epss</dt>
+                            <dd>1.00</dd>
+                          </div>
+                          <div>
+                            <dt>window</dt>
+                            <dd>30 days</dd>
+                          </div>
+                        </dl>
+                      </div>
+                      <div class="expert-thought" data-step-note="3">
+                        <p class="thought-label">03 · What is the impact?</p>
+                        <p>
+                          “<strong>CVSS 10.0</strong> says what happens if it
+                          lands. It never decides the priority.”
+                        </p>
+                        <p class="expert-task">
+                          Name the fix and the version that carries it.
+                        </p>
+                        <div class="expert-rule">
+                          <span>fixed in</span>
+                          <strong>2.17.1+</strong>
+                        </div>
+                      </div>
+                    </div>
+                    <p class="expert-caption">KEV ≫ SSVC ≫ EPSS ≫ CVSS</p>
+                  </aside>
+                </div>
+                <p class="manual-work-summary">
+                  <strong
+                    >Your agent reads the signals in order, then names the
+                    version that fixes it.</strong
+                  >
+                </p>
+              </div>
+              <figcaption>
+                Field selection from a crowbar CVE record. The ordering is the
+                point: exploitation, then likelihood, then impact.
+              </figcaption>
+            </figure>
+          </details>
+        </div>
+      </section>
+
+      <section class="section" id="versions">
+        <div class="container">
+          <div class="section-heading">
+            <p class="eyebrow">Example 02 · Version matching</p>
+            <h2>Which nginx CVEs affect 1.18.0?</h2>
+          </div>
+          <p class="lede">
+            Searching a product name returns everything that mentions nginx.
+            Crowbar tests the version against the real CPE ranges, so the
+            answer is the small list you actually have to act on.
+          </p>
+          <div class="home-example-grid">
+            <div class="home-case-story">
+              <h3>1. Ask about the version</h3>
+              <div class="agent-terminal home-analysis-terminal">
+                <div class="terminal-header">
+                  <span class="terminal-title"
+                    ><span class="terminal-dots" aria-hidden="true"
+                      ><i></i><i></i><i></i></span
+                    >Example prompt · nginx</span
+                  >
+                  <button
+                    class="copy-button"
+                    type="button"
+                    data-copy="version-analysis-prompt"
+                    aria-label="Copy nginx version prompt"
+                  >
+                    Copy
+                  </button>
+                </div>
+                <p class="terminal-prompt">
+                  <span class="prompt-symbol" aria-hidden="true">›</span
+                  ><span id="version-analysis-prompt"
+                    >We run nginx 1.18.0 in production. Use crowbar to find the
+                    CVEs that actually affect that version, and tell me what to
+                    upgrade to.</span
+                  ><span class="terminal-cursor" aria-hidden="true"></span>
+                </p>
+              </div>
+              <h3>2. Only true hits</h3>
+              <p>
+                Every returned row carries the range that matched, so the agent
+                can show its work instead of asserting a fact.
+              </p>
+              <p class="caption">
+                NVD CPE data is incomplete for some vendors. Cross-check with
+                <code>crowbar os</code> for Windows, iOS and macOS.
+              </p>
+            </div>
+            <div class="home-case-result">
+              <h3>3. Compare the two answers</h3>
+              <p>
+                Same product, two very different lists. One is a keyword hit,
+                the other is an applicability answer.
+              </p>
+              <div class="code-comparison">
+                <div class="code-block">
+                  <div class="code-header">
+                    <span>By product name</span>
+                  </div>
+                  <pre><code>$ crowbar search --product nginx
+
+412 CVEs mention nginx
+nginx 1.14.0  CRIT 7.5
+nginx 1.17.0  HIGH 6.1
+nginx 1.20.0  MED  4.3
+… every version in the index</code></pre>
+                </div>
+                <div class="code-block">
+                  <div class="code-header">
+                    <span>By version · matched ranges</span>
+                  </div>
+                  <pre><code>$ crowbar product nginx --version 1.18.0
+
+2 real hits (version-matched)
+CVE-2021-23017  HIGH 7.7  epss 0.53
+  matched f5:nginx &gt;=0.6.18 &lt;1.20.1
+  resolver off-by-one, attacker-forged UDP
+  can corrupt memory</code></pre>
+                </div>
+              </div>
+              <a class="text-link" href="guides/#version-matching"
+                >Read the version-matching guide →</a
+              >
+            </div>
+          </div>
+          <details class="home-evidence-details">
+            <summary>See what happens between the question and the answer</summary>
+            <figure class="workflow-figure">
+              <p class="figure-title">From question to patch</p>
+              <ol class="flow-steps">
+                <li>
+                  <span class="flow-label">01 · crowbar matches</span
+                  ><span class="flow-node">Test the version against CPE ranges</span
+                  ><span class="flow-note"
+                    >Exact versions, start bounds and end bounds are all
+                    checked against the NVD CPE data.</span
+                  >
+                </li>
+                <li>
+                  <span class="flow-label">02 · Your agent reads</span
+                  ><span class="flow-node">Ranks what matched</span
+                  ><span class="flow-note"
+                    >KEV first, then SSVC, then EPSS, then CVSS. The matched
+                    range travels with each row.</span
+                  >
+                </li>
+                <li>
+                  <span class="flow-label">03 · You patch</span
+                  ><span class="flow-node">Upgrade to a safe version</span
+                  ><span class="flow-note"
+                    >The answer names the fixed version instead of saying
+                    “update to the latest”.</span
+                  >
+                </li>
+              </ol>
+            </figure>
+          </details>
+        </div>
+      </section>
+
+      <section class="section" id="sources">
+        <div class="container">
+          <div class="home-showcase-heading">
+            <div>
+              <h2>One index. Every source.</h2>
+              <p class="lede">
+                Crowbar builds a local SQLite index from the sources that matter
+                and keeps them current with a cheap refresh.
+              </p>
+            </div>
+            <a class="text-link" href="showcase/">Showcase →</a>
+          </div>
+          <div class="home-case-grid">
+            <article class="home-case-card">
+              <p class="eyebrow">CVE core</p>
+              <h3>NVD, KEV, EPSS and SSVC</h3>
+              <p>
+                Descriptions, CVSS vectors, confirmed exploitation, 30-day
+                probability and the SSVC exploitation decision: the four signals
+                that rank a CVE.
+              </p>
+              <a class="text-link" href="showcase/#log4shell"
+                >Read the triage case</a
+              >
+            </article>
+            <article class="home-case-card">
+              <p class="eyebrow">Ecosystems &amp; vendors</p>
+              <h3>OSV, Debian, MSRC and Apple</h3>
+              <p>
+                Package advisories with fixed versions, distribution trackers,
+                and Windows, iOS and macOS advisories normalized into one
+                table.
+              </p>
+              <a class="text-link" href="showcase/#lodash-ecosystem"
+                >Read the ecosystem case</a
+              >
+            </article>
+            <article class="home-case-card">
+              <p class="eyebrow">Proof of concept</p>
+              <h3>Exploit-DB, Nuclei and Metasploit</h3>
+              <p>
+                Searchable by CVE or by code. Sources are downloaded for
+                inspection and never executed.
+              </p>
+              <a class="text-link" href="showcase/#poc-lookup"
+                >Read the PoC case</a
+              >
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="try-crowbar">
+        <div class="container start-row">
+          <div>
+            <p class="eyebrow">Your first triage</p>
+            <h2>Try crowbar on a real product.</h2>
+            <p>
+              Walk through a complete triage, from the first question to the
+              version you have to upgrade to.
+            </p>
+          </div>
+          <a class="button" href="showcase/">Read the case studies</a>
+        </div>
+      </section>
+
+      <section class="section" id="questions">
+        <div class="container">
+          <div class="section-heading">
+            <h2>Choose your question.</h2>
+            <p>
+              These guides cover setup and the lookups you reach for most.
+            </p>
+          </div>
+          <div class="workflows" id="analysis-guides">
+            <div>
+              <h3>Triage a CVE</h3>
+              <p>
+                Read the record in the right order: exploitation first, then
+                likelihood, then impact, then the fix.
+              </p>
+              <a href="guides/#triage-one-cve">CVE triage guide</a>
+            </div>
+            <div>
+              <h3>Match a version</h3>
+              <p>
+                Test the version you run against the real CPE ranges and get
+                back only the hits that apply.
+              </p>
+              <a href="guides/#version-matching">Version matching guide</a>
+            </div>
+            <div>
+              <h3>Find the proof of concept</h3>
+              <p>
+                Search exploit code by CVE, by description or by a fragment of
+                the code itself.
+              </p>
+              <a href="guides/#poc-code">Proof-of-concept guide</a>
+            </div>
+          </div>
+          <details class="home-evidence-details" id="project-prompts">
+            <summary>Try a bigger question</summary>
+            <div class="code-comparison home-project-prompts">
+              <div>
+                <div class="agent-terminal">
+                  <div class="terminal-header">
+                    <span class="terminal-title">
+                      <span class="terminal-dots" aria-hidden="true"
+                        ><i></i><i></i><i></i></span
+                      >Example prompt · Fleet
+                    </span>
+                    <button
+                      class="copy-button"
+                      type="button"
+                      data-copy="fleet-project-prompt"
+                      aria-label="Copy fleet audit prompt"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                  <p class="terminal-prompt">
+                    <span class="prompt-symbol" aria-hidden="true">›</span
+                    ><span id="fleet-project-prompt"
+                      >Use crowbar to audit the versions in our deployment
+                      manifest and list every CVE that applies, ordered by
+                      risk.</span
+                    ><span class="terminal-cursor" aria-hidden="true"></span>
+                  </p>
+                </div>
+                <p class="caption">One query per product and version.</p>
+              </div>
+              <div>
+                <div class="agent-terminal">
+                  <div class="terminal-header">
+                    <span class="terminal-title">
+                      <span class="terminal-dots" aria-hidden="true"
+                        ><i></i><i></i><i></i></span
+                      >Example prompt · Dependency
+                    </span>
+                    <button
+                      class="copy-button"
+                      type="button"
+                      data-copy="dependency-project-prompt"
+                      aria-label="Copy dependency audit prompt"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                  <p class="terminal-prompt">
+                    <span class="prompt-symbol" aria-hidden="true">›</span
+                    ><span id="dependency-project-prompt"
+                      >Use crowbar to check every dependency in
+                      <span translate="no">package-lock.json</span> against the
+                      advisories, and tell me which versions are safe.</span
+                    ><span class="terminal-cursor" aria-hidden="true"></span>
+                  </p>
+                </div>
+                <p class="caption">
+                  <a href="showcase/#lodash-ecosystem"
+                    >See the lodash case study →</a
+                  >
+                </p>
+              </div>
+            </div>
+          </details>
+        </div>
+      </section>
+
+      <section class="section" id="install">
+        <div class="container">
+          <div class="start-row">
+            <div>
+              <p class="eyebrow">Install</p>
+              <h2>Pick your size.</h2>
+              <p>
+                The setup helper checks for <code>uv</code>, prints the index
+                build command and the MCP snippet for your agent. It never
+                edits your configs without showing you the plan.
+              </p>
+            </div>
+            <a class="button" href="get-started/">Read the setup guide</a>
+          </div>
+          <div class="evidence-table-wrap">
+            <table class="evidence-table">
+              <caption>
+                Index tiers. Every tier ships the same commands; larger tiers
+                only add sources.
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">Tier</th>
+                  <th scope="col">Size</th>
+                  <th scope="col">Includes</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>lite</code></td>
+                  <td>~150 MB</td>
+                  <td>KEV, EPSS, recent CVEs, CWE</td>
+                </tr>
+                <tr>
+                  <td><code>medium</code></td>
+                  <td>~500 MB</td>
+                  <td>Full NVD, CAPEC, SSVC, ATT&amp;CK</td>
+                </tr>
+                <tr>
+                  <td><code>heavy</code></td>
+                  <td>~2 GB</td>
+                  <td>Exploit-DB, Nuclei, Metasploit, OSV</td>
+                </tr>
+                <tr>
+                  <td><code>extreme</code></td>
+                  <td>Full corpus</td>
+                  <td>MSRC, Apple, Debian, every source</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="guardrails">
+        <div class="container">
+          <div class="section-heading">
+            <h2>Reference data, not a weapon.</h2>
+          </div>
+          <p class="lede">
+            Crowbar looks things up. It is not a scanner, and it is not
+            permission to test anyone's systems.
+          </p>
+          <ol class="numbered-notes">
+            <li>
+              <h3>Authorization first.</h3>
+              <p>
+                Only test hosts you own or are permitted to test. Crowbar
+                answers questions; it does not touch anything.
+              </p>
+            </li>
+            <li>
+              <h3>Exploits are untrusted code.</h3>
+              <p>
+                <code>crowbar exploit &lt;id&gt;</code> downloads source for
+                inspection. It never runs it. Use a disposable VM.
+              </p>
+            </li>
+            <li>
+              <h3>KEV and SSVC describe elsewhere.</h3>
+              <p>
+                They mean exploitation was observed in the wild, not that your
+                host is affected.
+              </p>
+            </li>
+            <li>
+              <h3>Absence is not safety.</h3>
+              <p>
+                EPSS is a model estimate, and a missing row is not proof of
+                “not affected”.
+              </p>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="section" id="community">
+        <div class="container">
+          <div>
+            <h2>Any questions?</h2>
+            <div class="home-help-links">
+              <p>
+                <a href="faq/">Read the FAQ</a> for setup and common questions.
+              </p>
+              <p>
+                <a href="https://github.com/kushvinth/crowbar/issues/new/choose"
+                  >GitHub issues</a
+                >
+                to report a bug or request a feature.
+              </p>
+              <p>
+                <a href="get-started/">Follow the setup guide</a> to install,
+                build the index and connect your agent.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- website:footer:start -->
+    <!-- prettier-ignore -->
+    <footer class="site-footer">
+      <div class="container footer-inner">
+        <p>crowbar · A CVE index inside your codebase</p>
+        <div class="footer-links">
+          <a href="https://github.com/kushvinth/crowbar">Source</a
+          ><a href="https://pypi.org/project/crowbar-cli/">PyPI</a
+          ><a href="https://github.com/kushvinth/crowbar/blob/main/LICENSE">MIT license</a
+          ><a href="https://github.com/kushvinth/crowbar/blob/main/SECURITY.md">Security</a
+          ><a href="get-started/">Setup guide</a>
+        </div>
+      </div>
+    </footer>
+    <p class="sr-only" id="copy-status" role="status" aria-live="polite"></p>
+    <a class="back-to-top" href="#top" aria-label="Back to top">
+      <span aria-hidden="true">↑</span> Top
+    </a>
+    <!-- website:footer:end -->
+  </body>
+</html>

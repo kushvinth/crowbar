@@ -1,0 +1,205 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: lint (ruff, shellcheck, actionlint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/ruff-action@v3
+        with:
+          version: "0.14.7"
+          src: crowbar tests scripts mcp bin
+      - name: shellcheck
+        run: shellcheck scripts/*.sh
+      - name: actionlint
+        run: |
+          bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          ./actionlint -color
+
+  test:
+    name: test (${{ matrix.os }}, py ${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Static checks (schema, catalog, docs, versions)
+        run: python scripts/check.py
+      - name: Unit tests (fixture corpus)
+        run: python -m tests.test_unit
+      - name: Schema-v3 adapter tests
+        run: python -m tests.test_v3
+      - name: CLI smoke
+        run: ./bin/crowbar --help >/dev/null
+
+  package:
+    name: package (wheel + sdist, installed smoke)
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - name: Build
+        run: uv build
+      - name: Metadata check
+        run: uvx twine check --strict dist/*
+      - name: Wheel ships only the package
+        run: |
+          unzip -l dist/*.whl | tee /tmp/whl.txt
+          ! grep -E ' (tests|scripts|data|index)/' /tmp/whl.txt
+      - name: Install the wheel in a clean venv and smoke it
+        run: |
+          uv venv /tmp/whl && uv pip install --python /tmp/whl/bin/python dist/*.whl
+          python3 scripts/smoke.py /tmp/whl/bin/crowbar /tmp/whl/bin/crowbar-mcp
+      - name: Install the sdist in a clean venv and smoke it
+        run: |
+          uv venv /tmp/sd && uv pip install --python /tmp/sd/bin/python dist/*.tar.gz
+          python3 scripts/smoke.py /tmp/sd/bin/crowbar /tmp/sd/bin/crowbar-mcp
+      - name: uvx path (what the MCP config and the skill run)
+        run: |
+          whl=$(ls "$PWD"/dist/*.whl)
+          printf '#!/bin/sh\nexec uvx --from %s crowbar "$@"\n' "$whl" > /tmp/cb
+          printf '#!/bin/sh\nexec uvx --from %s crowbar-mcp "$@"\n' "$whl" > /tmp/cbm
+          chmod +x /tmp/cb /tmp/cbm
+          python3 scripts/smoke.py /tmp/cb /tmp/cbm
+      - uses: actions/upload-artifact@v7
+        if: matrix.os == 'ubuntu-latest'
+        with:
+          name: dist
+          path: dist/
+
+  npm:
+    name: npm (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ["18", "20", "22"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Pack contents
+        run: |
+          npm pack --dry-run --json > /tmp/pack.json
+          for f in scripts/install.mjs AGENTS.md CLAUDE.md GEMINI.md skills/crowbar/SKILL.md .mcp.json \
+                   server.json plugin.yaml gemini-extension.json .claude-plugin/plugin.json \
+                   .claude-plugin/marketplace.json .codex-plugin/plugin.json LICENSE README.md; do
+            jq -e --arg f "$f" '.[0].files | map(.path) | index($f)' /tmp/pack.json >/dev/null \
+              || { echo "missing from npm package: $f"; exit 1; }
+          done
+      - name: Setup tests (temp HOME, fake agents)
+        run: node --test scripts/install.test.mjs
+      - name: Publish rehearsal (no upload)
+        run: npm publish --dry-run --access public
+      - name: Installer runs without uv
+        run: node scripts/install.mjs | tee /tmp/out.txt && grep -q "uv is not installed" /tmp/out.txt
+
+  manifests:
+    name: agent manifests (plugin, skill, MCP registry)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - name: JSON / YAML parse
+        run: |
+          for f in package.json server.json gemini-extension.json .mcp.json \
+                   .claude-plugin/plugin.json .claude-plugin/marketplace.json .codex-plugin/plugin.json \
+                   release-please-config.json .release-please-manifest.json; do
+            jq empty "$f" || { echo "bad JSON: $f"; exit 1; }
+          done
+          yq -e '.name == "crowbar"' plugin.yaml
+      - name: server.json against the MCP registry schema
+        run: pipx run check-jsonschema --schemafile "$(jq -r '."$schema"' server.json)" server.json
+      - name: Skill frontmatter
+        run: |
+          head -1 skills/crowbar/SKILL.md | grep -qx -- '---'
+          grep -q '^name: crowbar$' skills/crowbar/SKILL.md
+          grep -q '^description: ' skills/crowbar/SKILL.md
+      - name: Claude Code plugin validate
+        run: npx -y @anthropic-ai/claude-code plugin validate .
+      - name: skills.sh discovers the skill
+        run: npx -y skills add . --list 2>&1 | tee /tmp/skills.txt && grep -q crowbar /tmp/skills.txt
+
+  nix:
+    name: nix flake
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: DeterminateSystems/magic-nix-cache-action@main
+      - run: nix flake check
+      - run: nix build .#default
+      - name: Installed smoke (index must not land in the read-only store)
+        run: python3 scripts/smoke.py ./result/bin/crowbar ./result/bin/crowbar-mcp
+      - run: nix run . -- --version
+
+  docker:
+    name: docker image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          tags: crowbar:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Run
+        run: |
+          docker run --rm crowbar:ci --version
+          docker run --rm crowbar:ci where --json | jq -e '.home == "/data"'
+
+  secrets:
+    name: secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: gitleaks (full history)
+        run: |
+          curl -fsSL https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_linux_x64.tar.gz | tar xz gitleaks
+          ./gitleaks git --redact --no-banner -v
+
+  ci-ok:
+    # single required check for branch protection
+    name: ci ok
+    if: always()
+    needs: [lint, test, package, npm, manifests, nix, docker, secrets]
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          [ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}" = false ]

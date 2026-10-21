@@ -1,0 +1,394 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Set up crowbar | crowbar</title>
+    <meta
+      name="description"
+      content="Install crowbar, build a local vulnerability index and connect it to your coding agent. Step-by-step setup for macOS, Linux and Windows."
+    />
+    <!-- prettier-ignore -->
+    <link rel="canonical" href="https://crowbar.kushvinth.com/get-started/" />
+    <!-- prettier-ignore -->
+    <meta property="og:type" content="website" />
+    <!-- prettier-ignore -->
+    <meta property="og:site_name" content="crowbar" />
+    <!-- prettier-ignore -->
+    <meta property="og:title" content="Set up crowbar | crowbar" />
+    <!-- prettier-ignore -->
+    <meta property="og:description" content="Install crowbar, build a local vulnerability index and connect it to your coding agent." />
+    <!-- prettier-ignore -->
+    <meta property="og:url" content="https://crowbar.kushvinth.com/get-started/" />
+    <!-- prettier-ignore -->
+    <meta property="og:image" content="https://crowbar.kushvinth.com/assets/social-card.png" />
+    <!-- prettier-ignore -->
+    <meta property="og:image:type" content="image/png" />
+    <!-- prettier-ignore -->
+    <meta property="og:image:width" content="1200" />
+    <!-- prettier-ignore -->
+    <meta property="og:image:height" content="630" />
+    <!-- prettier-ignore -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <!-- prettier-ignore -->
+    <meta name="twitter:title" content="Set up crowbar | crowbar" />
+    <!-- prettier-ignore -->
+    <meta name="twitter:description" content="Install crowbar, build a local vulnerability index and connect it to your coding agent." />
+    <!-- prettier-ignore -->
+    <meta name="twitter:image" content="https://crowbar.kushvinth.com/assets/social-card.png" />
+    <meta name="theme-color" content="#ffffff" />
+    <script src="../assets/theme.js"></script>
+    <link rel="icon" href="../assets/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="../assets/styles.css" />
+    <script src="../assets/main.js" defer></script>
+  </head>
+  <body id="top">
+    <a class="skip-link" href="#main">Skip to content</a>
+    <!-- prettier-ignore -->
+    <header class="site-header">
+      <div class="container header-inner">
+        <a class="brand" href="../" aria-label="crowbar home"
+          ><span class="brand-name">crowbar</span
+          ><span class="brand-caption" data-i18n-skip>A CVE index inside your codebase</span></a
+        >
+        <nav class="navigation" aria-label="Main navigation">
+          <a href="../get-started/" class="nav-start" aria-current="page">Get started</a>
+          <a href="../showcase/">Showcase</a>
+          <a href="../guides/">Guides</a>
+          <a href="../faq/">FAQ</a>
+        </nav>
+        <div class="header-social">
+          <button class="theme-toggle" type="button" data-theme-toggle hidden>
+            <svg class="theme-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+              <path d="M20.9 13a9 9 0 0 1-9.9-9.9A9 9 0 1 0 20.9 13Z" />
+            </svg>
+            <svg class="theme-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+              <circle cx="12" cy="12" r="4" />
+              <path d="M12 2v2m0 16v2M2 12h2m16 0h2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42" />
+            </svg>
+          </button>
+          <a
+            class="nav-github"
+            href="https://github.com/kushvinth/crowbar"
+            aria-label="crowbar on GitHub"
+            title="crowbar on GitHub"
+          >
+            <svg width="22" height="22" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+              <path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.65 7.65 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z" />
+            </svg>
+            <span class="nav-github-count" hidden aria-hidden="true"></span>
+          </a>
+          <a class="nav-pypi" href="https://pypi.org/project/crowbar-cli/" aria-label="crowbar on PyPI" title="crowbar on PyPI">PyPI</a>
+        </div>
+      </div>
+    </header>
+
+    <main id="main" class="container">
+      <div class="page-heading">
+        <p class="breadcrumb"><a href="../">Home</a> / Get started</p>
+        <h1>Set up crowbar.</h1>
+        <p class="lede">
+          Install the CLI, build a local CVE index and connect it to your
+          coding agent. Three steps, and nothing on your machine changes
+          without your approval.
+        </p>
+      </div>
+
+      <div class="article-layout">
+        <nav class="contents" aria-label="On this page">
+          <p>On this page</p>
+          <ul>
+            <li><a href="#install-with-npx">Install with npx</a></li>
+            <li><a href="#node-help">If Node.js is missing</a></li>
+            <li><a href="#uv-installation">Install with uv</a></li>
+            <li><a href="#build-the-index">Build the index</a></li>
+            <li><a href="#connect-your-agent">Connect your agent</a></li>
+            <li><a href="#verify">Verify the setup</a></li>
+            <li><a href="#keep-it-fresh">Keep it fresh</a></li>
+          </ul>
+        </nav>
+
+        <article class="article">
+          <section class="article-section" id="install-with-npx">
+            <h2>Install with npx</h2>
+            <p>
+              The setup helper checks your environment, prints the plan and
+              asks before it writes anything. It never installs a runtime you
+              did not approve.
+            </p>
+            <div class="code-block">
+              <div class="code-header">
+                <span>Terminal</span>
+                <button
+                  class="copy-button"
+                  type="button"
+                  data-copy="get-started-npx"
+                  aria-label="Copy npx setup command"
+                >
+                  Copy
+                </button>
+              </div>
+              <pre><code id="get-started-npx">npx crowbar-cli@latest setup</code></pre>
+            </div>
+            <p>
+              The helper prints the MCP snippet for your agent as well. Read it
+              before you accept.
+            </p>
+          </section>
+
+          <section class="article-section" id="node-help">
+            <h2>If Node.js is missing</h2>
+            <p>
+              The setup helper tells you which runtime is missing. Install it
+              with the package manager your system already uses, then run the
+              setup command again.
+            </p>
+            <details class="evidence-details" id="node-windows-help">
+              <summary>Windows (PowerShell)</summary>
+              <p>
+                Install Node.js with <code>winget</code>, then confirm the
+                version.
+              </p>
+              <div class="code-block">
+                <div class="code-header">
+                  <span>PowerShell</span>
+                  <button
+                    class="copy-button"
+                    type="button"
+                    data-copy="get-started-windows"
+                    aria-label="Copy Windows Node.js install command"
+                  >
+                    Copy
+                  </button>
+                </div>
+                <pre><code id="get-started-windows">winget install --exact --id OpenJS.NodeJS.LTS
+node --version</code></pre>
+              </div>
+            </details>
+            <details class="evidence-details" id="node-macos-help">
+              <summary>macOS</summary>
+              <p>Install Node.js, then confirm it is on your path.</p>
+              <div class="code-block">
+                <div class="code-header">
+                  <span>Terminal</span>
+                  <button
+                    class="copy-button"
+                    type="button"
+                    data-copy="get-started-macos"
+                    aria-label="Copy macOS Node.js install command"
+                  >
+                    Copy
+                  </button>
+                </div>
+                <pre><code id="get-started-macos">brew install node
+node --version</code></pre>
+              </div>
+            </details>
+            <details class="evidence-details" id="node-linux-help">
+              <summary>Linux</summary>
+              <p>
+                Install Node.js with your distribution's package manager, then
+                confirm the version.
+              </p>
+              <div class="code-block">
+                <div class="code-header">
+                  <span>Terminal</span>
+                  <button
+                    class="copy-button"
+                    type="button"
+                    data-copy="get-started-linux"
+                    aria-label="Copy Linux Node.js install command"
+                  >
+                    Copy
+                  </button>
+                </div>
+                <pre><code id="get-started-linux">sudo apt install nodejs npm
+node --version</code></pre>
+              </div>
+            </details>
+          </section>
+
+          <section class="article-section" id="uv-installation">
+            <h2>Install with uv</h2>
+            <p>
+              Prefer a Python-native install? The package publishes the CLI and
+              the MCP server on the same distribution.
+            </p>
+            <div class="code-block">
+              <div class="code-header">
+                <span>Terminal</span>
+                <button
+                  class="copy-button"
+                  type="button"
+                  data-copy="get-started-uv"
+                  aria-label="Copy uvx setup command"
+                >
+                  Copy
+                </button>
+              </div>
+              <pre><code id="get-started-uv">uvx crowbar-cli@latest setup</code></pre>
+            </div>
+            <p>
+              Crowbar builds its index with <code>uv</code>, so having it
+              installed is the fastest path to a working setup.
+            </p>
+          </section>
+
+          <section class="article-section" id="build-the-index">
+            <h2>Build the index</h2>
+            <p>
+              The index is a single SQLite file with FTS5. Pick a tier: it
+              decides which sources are fetched, not which commands you can
+              run.
+            </p>
+            <div class="code-block">
+              <div class="code-header">
+                <span>Terminal</span>
+                <button
+                  class="copy-button"
+                  type="button"
+                  data-copy="get-started-build"
+                  aria-label="Copy index build command"
+                >
+                  Copy
+                </button>
+              </div>
+              <pre><code id="get-started-build">uvx crowbar-cli sync --tier lite
+uvx crowbar-cli build --tier lite</code></pre>
+            </div>
+            <dl class="stats">
+              <div>
+                <dt>~150 MB</dt>
+                <dd>
+                  <code>lite</code>: KEV, EPSS, recent CVEs, CWE.
+                </dd>
+              </div>
+              <div>
+                <dt>~2 GB</dt>
+                <dd>
+                  <code>heavy</code>: adds Exploit-DB, Nuclei, Metasploit and
+                  OSV.
+                </dd>
+              </div>
+              <div>
+                <dt>Full</dt>
+                <dd>
+                  <code>extreme</code>: adds MSRC, Apple and Debian.
+                </dd>
+              </div>
+            </dl>
+            <p class="caption">
+              A full build needs about twice the index size in free disk space,
+              because it writes a temporary database and swaps it in.
+            </p>
+          </section>
+
+          <section class="article-section" id="connect-your-agent">
+            <h2>Connect your agent</h2>
+            <p>
+              Crowbar speaks the Model Context Protocol. Any agent that speaks
+              MCP can call it, and crowbar also ships as a skill so the agent
+              knows when and how to use it.
+            </p>
+            <div class="code-block">
+              <div class="code-header">
+                <span>Register the MCP server</span>
+                <button
+                  class="copy-button"
+                  type="button"
+                  data-copy="get-started-mcp"
+                  aria-label="Copy MCP registration command"
+                >
+                  Copy
+                </button>
+              </div>
+              <pre><code id="get-started-mcp">claude mcp add crowbar -- \
+  uvx --from crowbar-cli crowbar-mcp</code></pre>
+            </div>
+            <p>
+              The tool names are prefixed, so they read clearly in a transcript:
+              <code>cb_cve</code>, <code>cb_product</code>,
+              <code>cb_search</code>, <code>cb_exploit</code>,
+              <code>cb_poc</code> and <code>cb_sql</code>.
+            </p>
+          </section>
+
+          <section class="article-section" id="verify">
+            <h2>Verify the setup</h2>
+            <p>
+              These commands report whether the index is built, how fresh it is
+              and where it lives. They are safe to run at any time.
+            </p>
+            <div class="code-block">
+              <div class="code-header">
+                <span>Terminal</span>
+                <button
+                  class="copy-button"
+                  type="button"
+                  data-copy="get-started-doctor"
+                  aria-label="Copy doctor command"
+                >
+                  Copy
+                </button>
+              </div>
+              <pre><code id="get-started-doctor">crowbar doctor
+crowbar stats --json
+crowbar where --json</code></pre>
+            </div>
+            <p>
+              <code>crowbar doctor</code> exits non-zero when the index is
+              missing or stale. Everything else prints JSON you can pipe into
+              <code>jq</code>.
+            </p>
+          </section>
+
+          <section class="article-section" id="keep-it-fresh">
+            <h2>Keep it fresh</h2>
+            <p>
+              A refresh re-checks every source and updates only what changed.
+              It takes about ten seconds.
+            </p>
+            <div class="code-block">
+              <div class="code-header">
+                <span>Terminal</span>
+                <button
+                  class="copy-button"
+                  type="button"
+                  data-copy="get-started-update"
+                  aria-label="Copy update command"
+                >
+                  Copy
+                </button>
+              </div>
+              <pre><code id="get-started-update">crowbar update
+crowbar update --deep</code></pre>
+            </div>
+            <p>
+              The plain refresh covers the CVE tables. <code>--deep</code> also
+              reindexes the intelligence tables: Nuclei, Metasploit, ATT&amp;CK
+              and the vendor sources.
+            </p>
+          </section>
+        </article>
+      </div>
+    </main>
+
+    <!-- prettier-ignore -->
+    <footer class="site-footer">
+      <div class="container footer-inner">
+        <p>crowbar · A CVE index inside your codebase</p>
+        <div class="footer-links">
+          <a href="https://github.com/kushvinth/crowbar">Source</a
+          ><a href="https://pypi.org/project/crowbar-cli/">PyPI</a
+          ><a href="https://github.com/kushvinth/crowbar/blob/main/LICENSE">MIT license</a
+          ><a href="https://github.com/kushvinth/crowbar/blob/main/SECURITY.md">Security</a
+          ><a href="../get-started/">Setup guide</a>
+        </div>
+      </div>
+    </footer>
+    <p class="sr-only" id="copy-status" role="status" aria-live="polite"></p>
+    <a class="back-to-top" href="#top" aria-label="Back to top">
+      <span aria-hidden="true">↑</span> Top
+    </a>
+  </body>
+</html>

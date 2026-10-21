@@ -1,0 +1,48 @@
+{
+  "name": "crowbar",
+  "version": "0.1.0",
+  "description": "Retrieve CVEs and index them inside your codebase.",
+  "author": {
+    "name": "kushvinth",
+    "url": "https://github.com/kushvinth"
+  },
+  "homepage": "https://github.com/kushvinth/crowbar",
+  "repository": "https://github.com/kushvinth/crowbar",
+  "license": "MIT",
+  "keywords": [
+    "security",
+    "cve",
+    "vulnerability",
+    "offline",
+    "mcp"
+  ],
+  "skills": "./skills/",
+  "mcpServers": {
+    "crowbar": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "crowbar-cli",
+        "crowbar-mcp"
+      ]
+    }
+  },
+  "interface": {
+    "displayName": "crowbar",
+    "shortDescription": "A CVE index inside your codebase",
+    "longDescription": "Grounds CVE, exploit, and advisory answers in a local, reproducible SQLite index. No network, no rate limits, no hallucinated CVEs.",
+    "developerName": "kushvinth",
+    "category": "Security",
+    "capabilities": [
+      "MCP server",
+      "Instructions"
+    ],
+    "websiteURL": "https://github.com/kushvinth/crowbar",
+    "defaultPrompt": [
+      "Triage CVE-2021-44228 with crowbar.",
+      "We run nginx 1.18.0 - what's exploitable?",
+      "Find a public PoC for this CVE."
+    ],
+    "brandColor": "#0b7285"
+  }
+}

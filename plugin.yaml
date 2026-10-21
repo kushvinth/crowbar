@@ -1,0 +1,10 @@
+name: crowbar
+version: 0.1.0
+description: >-
+  Retrieve CVEs and index them inside your codebase - a local
+  CVE/exploit/advisory index as an MCP server and skill.
+author: kushvinth
+provides_mcp_servers:
+  - crowbar
+provides_skills:
+  - crowbar

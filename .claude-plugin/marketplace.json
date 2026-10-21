@@ -1,0 +1,17 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "crowbar",
+  "description": "Retrieve CVEs and index them inside your codebase. Never answer a CVE from memory again.",
+  "owner": {
+    "name": "kushvinth",
+    "url": "https://github.com/kushvinth"
+  },
+  "plugins": [
+    {
+      "name": "crowbar",
+      "description": "Retrieve CVEs and index them locally as an MCP server + skill. Offline, reproducible, token-budgeted.",
+      "source": "./",
+      "category": "security"
+    }
+  ]
+}

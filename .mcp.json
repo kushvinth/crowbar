@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "crowbar": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "crowbar-cli",
+        "crowbar-mcp"
+      ]
+    }
+  }
+}

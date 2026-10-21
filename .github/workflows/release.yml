@@ -1,0 +1,134 @@
+name: release
+
+# Each registry publishes only once it is set up: repo variables PUBLISH_NPM and
+# PUBLISH_PYPI = "true" (Settings > Secrets and variables > Actions > Variables).
+# To publish an existing release to a registry switched on later, run this
+# workflow by hand with that tag.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to publish (e.g. v0.1.0)"
+        required: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      publish: ${{ steps.out.outputs.publish }}
+      tag: ${{ steps.out.outputs.tag }}
+    steps:
+      - uses: googleapis/release-please-action@v5
+        if: github.event_name == 'push'
+        id: rp
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+      - id: out
+        env:
+          PUBLISH: ${{ steps.rp.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch' }}
+          TAG: ${{ inputs.tag || steps.rp.outputs.tag_name }}
+        run: |
+          echo "publish=$PUBLISH" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+  pypi:
+    needs: release-please
+    if: needs.release-please.outputs.publish == 'true' && vars.PUBLISH_PYPI == 'true'
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write          # PyPI trusted publishing (OIDC, no token)
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.release-please.outputs.tag }}
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - run: pipx run build
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true
+
+  npm:
+    needs: release-please
+    if: needs.release-please.outputs.publish == 'true' && vars.PUBLISH_NPM == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write          # npm provenance
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.release-please.outputs.tag }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+      - name: Publish unless this version is already on npm
+        run: |
+          v=$(node -p 'require("./package.json").version')
+          if npm view "crowbar-cli@$v" version >/dev/null 2>&1; then
+            echo "crowbar-cli@$v is already on npm"
+          else
+            npm publish --provenance --access public
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  docker:
+    needs: release-please
+    if: needs.release-please.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write          # push to ghcr.io
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.release-please.outputs.tag }}
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/metadata-action@v6
+        id: meta
+        with:
+          images: ghcr.io/kushvinth/crowbar
+          tags: |
+            type=semver,pattern={{version}},value=${{ needs.release-please.outputs.tag }}
+            type=raw,value=latest
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  mcp-registry:
+    needs: [release-please, pypi]   # the registry checks ownership against the PyPI README
+    if: needs.release-please.outputs.publish == 'true' && vars.PUBLISH_PYPI == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write          # GitHub OIDC auth for the io.github.kushvinth/* namespace
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.release-please.outputs.tag }}
+      - name: Install mcp-publisher
+        run: |
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/').tar.gz" \
+            | tar -xz mcp-publisher
+      - name: Publish server.json to the MCP registry
+        run: |
+          ./mcp-publisher login github-oidc
+          ./mcp-publisher publish

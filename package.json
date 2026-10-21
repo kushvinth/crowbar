@@ -1,0 +1,60 @@
+{
+  "name": "crowbar-cli",
+  "version": "0.1.0",
+  "description": "Retrieve CVEs and index them inside your codebase. One SQLite+FTS5 index, one CLI, one MCP server. Never answer a CVE from memory again.",
+  "keywords": [
+    "security",
+    "cve",
+    "vulnerability",
+    "mcp",
+    "mcp-server",
+    "nvd",
+    "kev",
+    "epss",
+    "exploit",
+    "offline",
+    "claude-code",
+    "opencode",
+    "cursor",
+    "codex",
+    "agent"
+  ],
+  "license": "MIT",
+  "author": {
+    "name": "kushvinth",
+    "email": "kushvinth.m@gmail.com",
+    "url": "https://github.com/kushvinth"
+  },
+  "homepage": "https://github.com/kushvinth/crowbar",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kushvinth/crowbar.git"
+  },
+  "bugs": {
+    "url": "https://github.com/kushvinth/crowbar/issues"
+  },
+  "bin": {
+    "crowbar": "scripts/install.mjs"
+  },
+  "files": [
+    "scripts/install.mjs",
+    "AGENTS.md",
+    "skills/",
+    ".mcp.json",
+    "server.json",
+    "LICENSE",
+    "README.md",
+    "CLAUDE.md",
+    "GEMINI.md",
+    "plugin.yaml",
+    ".claude-plugin/",
+    ".codex-plugin/",
+    "gemini-extension.json"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

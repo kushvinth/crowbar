@@ -1,0 +1,41 @@
+name: Data issue
+description: A CVE, version range, KEV/EPSS value, exploit link, or advisory is wrong or missing.
+labels: [data]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        crowbar indexes upstream data; it does not author it. This form helps us tell an indexing bug
+        (ours) from an upstream error (NVD, CISA, FIRST, OSV, a vendor) that we can only report onward.
+  - type: input
+    id: ids
+    attributes:
+      label: CVE / advisory ids
+      placeholder: CVE-2021-44228, GHSA-jfh8-c2jp-5v3q
+    validations: { required: true }
+  - type: textarea
+    id: query
+    attributes:
+      label: What you ran
+      description: The `crowbar` command or MCP tool call, with `--json` output.
+      render: shell
+    validations: { required: true }
+  - type: textarea
+    id: correct
+    attributes:
+      label: What the correct data is, and where it comes from
+      description: Link the authoritative source (vendor advisory, NVD page, KEV entry).
+    validations: { required: true }
+  - type: dropdown
+    id: source
+    attributes:
+      label: Which source looks wrong?
+      options: [NVD (CVSS / CPE ranges), CISA KEV, EPSS, CVE List v5 (CNA), SSVC / Vulnrichment, Exploit-DB, Nuclei, Metasploit, OSV / GHSA, Debian, MSRC, Apple, PoC-in-GitHub, not sure]
+    validations: { required: true }
+  - type: textarea
+    id: doctor
+    attributes:
+      label: crowbar doctor
+      description: Tier and freshness matter here - a lite or stale index is missing data on purpose.
+      render: text
+    validations: { required: true }

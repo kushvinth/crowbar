@@ -1,0 +1,44 @@
+minimum_pre_commit_version: "3.0.0"
+repos:
+  - repo: local
+    hooks:
+      - id: crowbar-check
+        name: crowbar static checks (schema/catalog/docs/style)
+        entry: python3 scripts/check.py
+        language: system
+        files: ^(crowbar|scripts|tests|mcp|bin|docs)/|^(README|AGENTS|TODO)\.md$|^Makefile$
+        pass_filenames: false
+
+      - id: crowbar-unit
+        name: crowbar unit tests (fixture DB, no corpus)
+        entry: python3 -m tests.test_unit
+        language: system
+        files: ^(crowbar|tests|scripts|mcp|bin)/
+        pass_filenames: false
+
+      - id: crowbar-v3
+        name: crowbar schema-v3 adapter tests
+        entry: python3 -m tests.test_v3
+        language: system
+        files: ^(crowbar|tests)/
+        pass_filenames: false
+
+      - id: crowbar-corpus
+        name: crowbar corpus tests (skipped if index/crowbar.db is absent)
+        entry: python3 -m tests.test_corpus
+        language: system
+        files: ^(crowbar|tests|scripts|mcp|bin)/
+        pass_filenames: false
+
+      - id: crowbar-verify
+        name: crowbar index + dataset verify (skipped if index/crowbar.db is absent)
+        entry: "bash -c 'test -f index/crowbar.db && exec python3 bin/crowbar verify || echo skipping-no-index-hv-db'"
+        language: system
+        files: ^(crowbar|scripts|mcp|bin)/
+        pass_filenames: false
+
+      - id: gitleaks
+        name: gitleaks (staged secrets)
+        entry: gitleaks git --staged --redact --no-banner
+        language: system
+        pass_filenames: false

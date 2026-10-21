@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Guides | crowbar</title>
+    <meta
+      name="description"
+      content="Use crowbar from the command line or from inside your codebase: CVE triage, version matching, ecosystem advisories, vendor advisories and proof-of-concept search."
+    />
+    <!-- prettier-ignore -->
+    <link rel="canonical" href="https://crowbar.kushvinth.com/guides/" />
+    <!-- prettier-ignore -->
+    <meta property="og:type" content="website" />
+    <!-- prettier-ignore -->
+    <meta property="og:site_name" content="crowbar" />
+    <!-- prettier-ignore -->
+    <meta property="og:title" content="Guides | crowbar" />
+    <!-- prettier-ignore -->
+    <meta property="og:description" content="Use crowbar from the command line or from inside your codebase." />
+    <!-- prettier-ignore -->
+    <meta property="og:url" content="https://crowbar.kushvinth.com/guides/" />
+    <!-- prettier-ignore -->
+    <meta property="og:image" content="https://crowbar.kushvinth.com/assets/social-card.png" />
+    <!-- prettier-ignore -->
+    <meta property="og:image:type" content="image/png" />
+    <!-- prettier-ignore -->
+    <meta property="og:image:width" content="1200" />
+    <!-- prettier-ignore -->
+    <meta property="og:image:height" content="630" />
+    <!-- prettier-ignore -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <!-- prettier-ignore -->
+    <meta name="twitter:title" content="Guides | crowbar" />
+    <!-- prettier-ignore -->
+    <meta name="twitter:description" content="Use crowbar from the command line or from inside your codebase." />
+    <!-- prettier-ignore -->
+    <meta name="twitter:image" content="https://crowbar.kushvinth.com/assets/social-card.png" />
+    <meta name="theme-color" content="#ffffff" />
+    <script src="../assets/theme.js"></script>
+    <link rel="icon" href="../assets/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="../assets/styles.css" />
+    <script src="../assets/main.js" defer></script>
+  </head>
+  <body id="top">
+    <a class="skip-link" href="#main">Skip to content</a>
+    <!-- prettier-ignore -->
+    <header class="site-header">
+      <div class="container header-inner">
+        <a class="brand" href="../" aria-label="crowbar home"
+          ><span class="brand-name">crowbar</span
+          ><span class="brand-caption" data-i18n-skip>A CVE index inside your codebase</span></a
+        >
+        <nav class="navigation" aria-label="Main navigation">
+          <a href="../get-started/" class="nav-start">Get started</a>
+          <a href="../showcase/">Showcase</a>
+          <a href="../guides/" aria-current="page">Guides</a>
+          <a href="../faq/">FAQ</a>
+        </nav>
+        <div class="header-social">
+          <button class="theme-toggle" type="button" data-theme-toggle hidden>
+            <svg class="theme-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+              <path d="M20.9 13a9 9 0 0 1-9.9-9.9A9 9 0 1 0 20.9 13Z" />
+            </svg>
+            <svg class="theme-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+              <circle cx="12" cy="12" r="4" />
+              <path d="M12 2v2m0 16v2M2 12h2m16 0h2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42" />
+            </svg>
+          </button>
+          <a
+            class="nav-github"
+            href="https://github.com/kushvinth/crowbar"
+            aria-label="crowbar on GitHub"
+            title="crowbar on GitHub"
+          >
+            <svg width="22" height="22" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+              <path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.65 7.65 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z" />
+            </svg>
+            <span class="nav-github-count" hidden aria-hidden="true"></span>
+          </a>
+          <a class="nav-pypi" href="https://pypi.org/project/crowbar-cli/" aria-label="crowbar on PyPI" title="crowbar on PyPI">PyPI</a>
+        </div>
+      </div>
+    </header>
+
+    <main id="main" class="container">
+      <div class="page-heading">
+        <p class="breadcrumb"><a href="../">Home</a> / Guides</p>
+        <h1>Ask crowbar the hard questions.</h1>
+        <p class="lede">
+          Every command returns stable JSON with <code>--json</code>, so the
+          same call works from your terminal, your CI, or your coding agent.
+        </p>
+      </div>
+
+      <div class="article-layout">
+        <nav class="contents" aria-label="On this page">
+          <p>On this page</p>
+          <ul>
+            <li><a href="#triage-one-cve">Triage one CVE</a></li>
+            <li><a href="#version-matching">Match a version</a></li>
+            <li><a href="#ecosystem-advisories">Ecosystem packages</a></li>
+            <li><a href="#vendor-advisories">Windows, iOS and macOS</a></li>
+            <li><a href="#poc-code">Find proof of concept</a></li>
+            <li><a href="#from-your-agent">Query it from your tooling</a></li>
+            <li><a href="#sql-escape-hatch">The SQL escape hatch</a></li>
+          </ul>
+        </nav>
+
+        <article class="article">
+          <section class="article-section" id="triage-one-cve">
+            <h2>Triage one CVE</h2>
+            <p>
+              One command returns the description, the severity, the
+              exploitation signals and the affected version ranges. Read it in
+              a fixed order.
+            </p>
+            <div class="code-block">
+              <div class="code-header">
+                <span>Terminal</span>
+                <button
+                  class="copy-button"
+                  type="button"
+                  data-copy="guide-cve"
+                  aria-label="Copy CVE triage command"
+                >
+                  Copy
+                </button>
+              </div>
+              <pre><code id="guide-cve">crowbar cve CVE-2021-44228 --json | jq \
+  '{id,severity,cvss,epss,kev,cwe,ssvc,
+    exploits:(.exploits|length), nuclei:(.nuclei|length)}'</code></pre>
+            </div>
+            <ol class="numbered-notes">
+              <li>
+                <h3>KEV</h3>
+                <p>
+                  <code>kev == 1</code> means exploitation was confirmed in the
+                  wild. Nothing else outranks it.
+                </p>
+              </li>
+              <li>
+                <h3>SSVC</h3>
+                <p>
+                  <code>ssvc.exploitation</code> is
+                  <code>active</code>, <code>poc</code> or <code>none</code>.
+                </p>
+              </li>
+              <li>
+                <h3>EPSS</h3>
+                <p>
+                  The estimated probability of exploitation in the next 30
+                  days. It is a model estimate, not a verdict.
+                </p>
+              </li>
+              <li>
+                <h3>CVSS</h3>
+                <p>
+                  The impact if the vulnerability is triggered. Never present it
+                  on its own as risk.
+                </p>
+              </li>
+            </ol>
+          </section>
+
+          <section class="article-section" id="version-matching">
+            <h2>Match a version</h2>
+            <p>
+              This is the command that answers “are we affected”. It tests the
+              version against every CPE range in the index and returns only the
+              real hits, each with the range that matched.
+            </p>
+            <div class="code-block">
+              <div class="code-header">
+                <span>Terminal</span>
+                <button
+                  class="copy-button"
+                  type="button"
+                  data-copy="guide-product"
+                  aria-label="Copy product version command"
+                >
+                  Copy
+                </button>
+              </div>
+              <pre><code id="guide-product">crowbar product nginx --version 1.18.0 --json</code></pre>
+            </div>
+            <p>
+              Exact versions, start bounds and end bounds are all checked. Rows
+              are ranked by KEV, then EPSS, then whether a working exploit
+              exists.
+            </p>
+            <p class="caption">
+              NVD's CPE data is incomplete for some vendors, notably Apple.
+              Cross-check Windows, iOS and macOS with <code>crowbar os</code>.
+            </p>
+          </section>
+
+          <section class="article-section" id="ecosystem-advisories">
+            <h2>Ecosystem packages</h2>
+            <p>
+              Package advisories carry the range that introduced and the
+              version that fixed the problem, so the answer can name the
+              upgrade.
+            </p>
+            <div class="code-block">
+              <div class="code-header">
+                <span>Terminal</span>
+                <button
+                  class="copy-button"
+                  type="button"
+                  data-copy="guide-advisory"
+                  aria-label="Copy advisory command"
+                >
+                  Copy
+                </button>
+              </div>
+              <pre><code id="guide-advisory">crowbar advisory --package lodash --ecosystem npm --json
+crowbar advisory "prototype pollution" --limit 20</code></pre>
+            </div>
+            <p>
+              The same information is attached to a CVE record under
+              <code>advisories</code>, and the Debian fixed version appears
+              next to it.
+            </p>
+          </section>
+
+          <section class="article-section" id="vendor-advisories">
+            <h2>Windows, iOS and macOS</h2>
+            <p>
+              Vendor advisories are normalized into one table with a severity
+              and an impact label, so they can be filtered the same way as
+              everything else.
+            </p>
+            <div class="code-block">
+              <div class="code-header">
+                <span>Terminal</span>
+                <button
+                  class="copy-button"
+                  type="button"
+                  data-copy="guide-os"
+                  aria-label="Copy vendor advisory command"
+                >
+                  Copy
+                </button>
+              </div>
+              <pre><code id="guide-os">crowbar os --platform windows --impact RCE --since 2025-01-01
+crowbar os --platform ios
+crowbar os --platform macos --limit 100</code></pre>
+            </div>
+            <p>
+              The impact label is one of <code>RCE</code>,
+              <code>EoP</code>, <code>DoS</code>,
+              <code>InfoDisclosure</code>, <code>Spoofing</code>,
+              <code>Bypass</code> or <code>Tampering</code>.
+            </p>
+          </section>
+
+          <section class="article-section" id="poc-code">
+            <h2>Find proof of concept</h2>
+            <p>
+              Search exploit code by CVE, by description or by a snippet of
+              code. Crowbar downloads the source for inspection; it never runs
+              it.
+            </p>
+            <div class="code-block">
+              <div class="code-header">
+                <span>Terminal</span>
+                <button
+                  class="copy-button"
+                  type="button"
+                  data-copy="guide-poc"
+                  aria-label="Copy proof-of-concept commands"
+                >
+                  Copy
+                </button>
+              </div>
+              <pre><code id="guide-poc">crowbar exploit "log4j jndi" --json
+crowbar exploit 50592
+crowbar code "jndi lookup ldap"
+crowbar nuclei "cve-2021-44228" --json
+crowbar msf ms17 --json</code></pre>
+            </div>
+            <p>
+              Public repository metadata lives in its own table:
+              <code>crowbar poc --cve CVE-2021-44228</code> lists repositories
+              that mention the CVE, with stars and language.
+            </p>
+          </section>
+
+          <section class="article-section" id="from-your-agent">
+            <h2>Query it from your tooling</h2>
+            <p>
+              The MCP server exposes the same lookups as tools. A tool call
+              returns the smallest sufficient answer and reports the total row
+              count when it caps the list.
+            </p>
+            <div class="code-block">
+              <div class="code-header">
+                <span>Example exchange</span>
+              </div>
+              <pre><code><span style="color:var(--accent)">You</span>   We run nginx 1.18.0 in prod. Anything exploitable we should patch now?
+<span style="color:var(--accent)">crowbar</span>  › cb_product(name="nginx", version="1.18.0")
+      2 real hits (version-matched): CVE-2021-23017 (HIGH 7.7, epss 0.53)
+      is the one to patch, upgrade to &gt;=1.20.1. Grounded, offline, ~80 ms.</code></pre>
+            </div>
+            <p>
+              The same call from the CLI is
+              <code>crowbar product nginx --version 1.18.0</code>. The skill
+              teaches the agent which path answers which question, so it stops
+              reaching for search when it needs applicability. Once the index
+              is built, any tool in your codebase can query it directly.
+            </p>
+          </section>
+
+          <section class="article-section" id="sql-escape-hatch">
+            <h2>The SQL escape hatch</h2>
+            <p>
+              When no command fits, read the index directly. The session runs
+              with <code>PRAGMA query_only</code> enabled, so it cannot write.
+            </p>
+            <div class="code-block">
+              <div class="code-header">
+                <span>Terminal</span>
+                <button
+                  class="copy-button"
+                  type="button"
+                  data-copy="guide-sql"
+                  aria-label="Copy SQL command"
+                >
+                  Copy
+                </button>
+              </div>
+              <pre><code id="guide-sql">crowbar sql "select cve, vendor, product, name, date_added
+  from kev where date_added &gt;= date('now','-90 day')
+  order by date_added desc" --json</code></pre>
+            </div>
+            <p class="caption">
+              Read-only: no writes, no schema changes. It is the same database
+              the commands use, so the answer cannot disagree with the CLI.
+            </p>
+          </section>
+        </article>
+      </div>
+    </main>
+
+    <!-- prettier-ignore -->
+    <footer class="site-footer">
+      <div class="container footer-inner">
+        <p>crowbar · A CVE index inside your codebase</p>
+        <div class="footer-links">
+          <a href="https://github.com/kushvinth/crowbar">Source</a
+          ><a href="https://pypi.org/project/crowbar-cli/">PyPI</a
+          ><a href="https://github.com/kushvinth/crowbar/blob/main/LICENSE">MIT license</a
+          ><a href="https://github.com/kushvinth/crowbar/blob/main/SECURITY.md">Security</a
+          ><a href="../get-started/">Setup guide</a>
+        </div>
+      </div>
+    </footer>
+    <p class="sr-only" id="copy-status" role="status" aria-live="polite"></p>
+    <a class="back-to-top" href="#top" aria-label="Back to top">
+      <span aria-hidden="true">↑</span> Top
+    </a>
+  </body>
+</html>

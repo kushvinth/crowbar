@@ -1,0 +1,39 @@
+# Corpus and build output - never committed (see docs/DATASETS.md)
+data/
+index/
+*.db
+*.db.*
+*.sha256
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+
+# Agent/editor local config
+opencode.json
+.opencode/
+.crowbar
+.DS_Store
+
+# Experiments / non-public working dirs
+ganith/
+Exploits/
+notes/
+skills/hacker-skill/
+_publish/
+
+# Docusaurus
+website/node_modules/
+website/build/
+website/.docusaurus/
+assets/demo.mp4
+assets/demo.webm
+
+# nix build output
+result
+result-*

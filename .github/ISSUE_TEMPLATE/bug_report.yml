@@ -1,0 +1,60 @@
+name: Bug report
+description: Something in the CLI, MCP server, skill, or index build is wrong.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Security vulnerability in crowbar itself? Don't file it here - use the private advisory link on the previous page.
+        Wrong or missing CVE data? Use the **Data issue** template instead.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you ran (or asked your agent) and what went wrong. Paste the exact command and output.
+      render: shell
+    validations: { required: true }
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations: { required: true }
+  - type: input
+    id: version
+    attributes:
+      label: crowbar version
+      description: Output of `crowbar --version` (or `uvx crowbar-cli --version`).
+      placeholder: crowbar 0.1.0
+    validations: { required: true }
+  - type: dropdown
+    id: install
+    attributes:
+      label: How did you install it?
+      options:
+        - uvx / uv tool
+        - pip
+        - npx crowbar-cli
+        - Claude Code plugin
+        - Codex / Gemini / Cursor / opencode MCP config
+        - nix
+        - Homebrew
+        - Docker
+        - git clone
+    validations: { required: true }
+  - type: dropdown
+    id: host
+    attributes:
+      label: Agent host (if the bug is in MCP or the skill)
+      options: [none - CLI only, Claude Code, Codex, Gemini CLI, Cursor, opencode, other]
+  - type: textarea
+    id: doctor
+    attributes:
+      label: crowbar doctor
+      description: Output of `crowbar doctor` - tier, freshness, schema. Redact local paths if you like.
+      render: text
+  - type: input
+    id: os
+    attributes:
+      label: OS and Python version
+      placeholder: macOS 15.5, Python 3.13.2
+    validations: { required: true }

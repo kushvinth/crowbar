@@ -1,0 +1,14 @@
+.git
+data/
+index/
+*.db
+*.db.*
+website/
+_publish/
+result
+result-*
+__pycache__/
+*.py[cod]
+assets/*.gif
+assets/*.mp4
+assets/*.webm

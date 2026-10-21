@@ -1,0 +1,35 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.kushvinth/crowbar",
+  "title": "crowbar",
+  "description": "Retrieve CVEs and index them inside your codebase. One SQLite+FTS5 index, one CLI, one MCP server.",
+  "websiteUrl": "https://github.com/kushvinth/crowbar",
+  "repository": {
+    "url": "https://github.com/kushvinth/crowbar",
+    "source": "github"
+  },
+  "version": "0.1.0",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "registryBaseUrl": "https://pypi.org",
+      "identifier": "crowbar-cli",
+      "version": "0.1.0",
+      "runtimeHint": "uvx",
+      "transport": {
+        "type": "stdio"
+      },
+      "runtimeArguments": [
+        {
+          "type": "named",
+          "name": "--from",
+          "value": "crowbar-cli"
+        },
+        {
+          "type": "positional",
+          "value": "crowbar-mcp"
+        }
+      ]
+    }
+  ]
+}

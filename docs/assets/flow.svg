@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="150" viewBox="0 0 760 150" font-family="ui-sans-serif,system-ui,sans-serif" font-size="13">
+  <rect width="760" height="150" fill="none"/>
+  <g text-anchor="middle">
+    <rect x="20" y="45" width="150" height="60" rx="10" fill="#0f151c" stroke="#2a3a44"/>
+    <text x="95" y="70" fill="#e6edf3" font-weight="700">your agent</text>
+    <text x="95" y="90" fill="#8b9aa7">asks about a target</text>
+    <rect x="305" y="45" width="150" height="60" rx="10" fill="#0d2b2b" stroke="#2dd4bf"/>
+    <text x="380" y="70" fill="#2dd4bf" font-weight="700">crowbar (MCP)</text>
+    <text x="380" y="90" fill="#8b9aa7">local index, offline</text>
+    <rect x="590" y="45" width="150" height="60" rx="10" fill="#0f151c" stroke="#2a3a44"/>
+    <text x="665" y="70" fill="#e6edf3" font-weight="700">grounded answer</text>
+    <text x="665" y="90" fill="#8b9aa7">verdict + the PoC</text>
+  </g>
+  <g stroke="#2dd4bf" stroke-width="2" fill="#2dd4bf">
+    <line x1="170" y1="75" x2="300" y2="75"/><polygon points="300,75 292,71 292,79"/>
+    <line x1="455" y1="75" x2="585" y2="75"/><polygon points="585,75 577,71 577,79"/>
+  </g>
+</svg>

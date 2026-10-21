@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Showcase | crowbar</title>
+    <meta
+      name="description"
+      content="Real crowbar sessions: triaging Log4Shell, matching a product version and locating proof-of-concept code, with the evidence attached."
+    />
+    <!-- prettier-ignore -->
+    <link rel="canonical" href="https://crowbar.kushvinth.com/showcase/" />
+    <!-- prettier-ignore -->
+    <meta property="og:type" content="website" />
+    <!-- prettier-ignore -->
+    <meta property="og:site_name" content="crowbar" />
+    <!-- prettier-ignore -->
+    <meta property="og:title" content="Showcase | crowbar" />
+    <!-- prettier-ignore -->
+    <meta property="og:description" content="Real crowbar sessions: triaging Log4Shell, matching a product version and locating proof-of-concept code." />
+    <!-- prettier-ignore -->
+    <meta property="og:url" content="https://crowbar.kushvinth.com/showcase/" />
+    <!-- prettier-ignore -->
+    <meta property="og:image" content="https://crowbar.kushvinth.com/assets/social-card.png" />
+    <!-- prettier-ignore -->
+    <meta property="og:image:type" content="image/png" />
+    <!-- prettier-ignore -->
+    <meta property="og:image:width" content="1200" />
+    <!-- prettier-ignore -->
+    <meta property="og:image:height" content="630" />
+    <!-- prettier-ignore -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <!-- prettier-ignore -->
+    <meta name="twitter:title" content="Showcase | crowbar" />
+    <!-- prettier-ignore -->
+    <meta name="twitter:description" content="Real crowbar sessions: triaging Log4Shell, matching a product version and locating proof-of-concept code." />
+    <!-- prettier-ignore -->
+    <meta name="twitter:image" content="https://crowbar.kushvinth.com/assets/social-card.png" />
+    <meta name="theme-color" content="#ffffff" />
+    <script src="../assets/theme.js"></script>
+    <link rel="icon" href="../assets/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="../assets/styles.css" />
+    <script src="../assets/main.js" defer></script>
+  </head>
+  <body id="top">
+    <a class="skip-link" href="#main">Skip to content</a>
+    <!-- prettier-ignore -->
+    <header class="site-header">
+      <div class="container header-inner">
+        <a class="brand" href="../" aria-label="crowbar home"
+          ><span class="brand-name">crowbar</span
+          ><span class="brand-caption" data-i18n-skip>A CVE index inside your codebase</span></a
+        >
+        <nav class="navigation" aria-label="Main navigation">
+          <a href="../get-started/" class="nav-start">Get started</a>
+          <a href="../showcase/" aria-current="page">Showcase</a>
+          <a href="../guides/">Guides</a>
+          <a href="../faq/">FAQ</a>
+        </nav>
+        <div class="header-social">
+          <button class="theme-toggle" type="button" data-theme-toggle hidden>
+            <svg class="theme-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+              <path d="M20.9 13a9 9 0 0 1-9.9-9.9A9 9 0 1 0 20.9 13Z" />
+            </svg>
+            <svg class="theme-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+              <circle cx="12" cy="12" r="4" />
+              <path d="M12 2v2m0 16v2M2 12h2m16 0h2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42" />
+            </svg>
+          </button>
+          <a
+            class="nav-github"
+            href="https://github.com/kushvinth/crowbar"
+            aria-label="crowbar on GitHub"
+            title="crowbar on GitHub"
+          >
+            <svg width="22" height="22" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+              <path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.65 7.65 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z" />
+            </svg>
+            <span class="nav-github-count" hidden aria-hidden="true"></span>
+          </a>
+          <a class="nav-pypi" href="https://pypi.org/project/crowbar-cli/" aria-label="crowbar on PyPI" title="crowbar on PyPI">PyPI</a>
+        </div>
+      </div>
+    </header>
+
+    <main id="main" class="container">
+      <div class="page-heading">
+        <p class="breadcrumb"><a href="../">Home</a> / Showcase</p>
+        <h1>crowbar case studies.</h1>
+        <p class="lede">
+          One question per case, the command that answers it, and the evidence
+          behind the answer.
+        </p>
+      </div>
+
+      <div class="article-layout">
+        <nav class="contents" aria-label="On this page">
+          <p>On this page</p>
+          <ul>
+            <li><a href="#log4shell">Log4Shell triage</a></li>
+            <li><a href="#nginx-version">nginx version match</a></li>
+            <li><a href="#lodash-ecosystem">lodash in npm</a></li>
+            <li><a href="#poc-lookup">Finding the proof of concept</a></li>
+          </ul>
+        </nav>
+
+        <article class="article">
+          <section class="article-section" id="log4shell">
+            <p class="eyebrow">Case 01 · CVE triage</p>
+            <h2>Is Log4Shell worth patching?</h2>
+            <p class="lede">
+              Memory knows CVSS is 10.0. It does not know whether anyone is
+              actually using it. The index does.
+            </p>
+            <div class="code-block">
+              <div class="code-header">
+                <span>crowbar cve CVE-2021-44228</span>
+              </div>
+              <pre><code>CVE-2021-44228  CRIT 10.0  KEV  epss 1.00  ssvc=active
+affects  apache:log4j &gt;=2.0.1 &lt;2.3.1, &gt;=2.13.0 &lt;2.15.0 ...
+KEV  added 2021-12-10  ransomware=Known
+Exploit-DB (3)   Nuclei (44)   Metasploit (4)</code></pre>
+            </div>
+            <dl class="agent-evidence-roles">
+              <div>
+                <dt>crowbar returns</dt>
+                <dd>
+                  The exploitation signals, the affected ranges and the count of
+                  existing proof-of-concept code.
+                </dd>
+              </div>
+              <div>
+                <dt>You get</dt>
+                <dd>
+                  That it is being exploited, that the fix is 2.17.1 or later,
+                  and that the rows say nothing about your own host.
+                </dd>
+              </div>
+            </dl>
+            <p class="caption">
+              The order matters. KEV leads, EPSS follows, CVSS is read last as
+              the impact if it lands.
+            </p>
+          </section>
+
+          <section class="article-section" id="nginx-version">
+            <p class="eyebrow">Case 02 · Applicability</p>
+            <h2>Which nginx CVEs affect 1.18.0?</h2>
+            <p class="lede">
+              The same product, the same question, and a list two hundred
+              entries shorter.
+            </p>
+            <div class="code-comparison">
+              <div class="code-block">
+                <div class="code-header">
+                  <span>By product name</span>
+                </div>
+                <pre><code>$ crowbar search --product nginx
+
+412 CVEs mention nginx
+nginx 1.14.0  CRIT 7.5
+nginx 1.17.0  HIGH 6.1
+nginx 1.20.0  MED  4.3
+… every version in the index</code></pre>
+              </div>
+              <div class="code-block">
+                <div class="code-header">
+                  <span>By version · matched ranges</span>
+                </div>
+                <pre><code>$ crowbar product nginx --version 1.18.0
+
+2 real hits (version-matched)
+CVE-2021-23017  HIGH 7.7  epss 0.53
+  matched f5:nginx &gt;=0.6.18 &lt;1.20.1
+CVE-2019-15517  MED  5.5
+  matched jc21:nginx_proxy_manager &lt;2.0.13</code></pre>
+              </div>
+            </div>
+            <p>
+              Each row carries the range that matched, so the agent can show
+              its work and you can check it.
+            </p>
+            <details class="evidence-details">
+              <summary>See the ranking rule</summary>
+              <p>
+                Rows are ordered by KEV, then SSVC exploitation state, then
+                EPSS, then whether a working exploit exists. CVSS is included,
+                but it never decides the order on its own.
+              </p>
+            </details>
+          </section>
+
+          <section class="article-section" id="lodash-ecosystem">
+            <p class="eyebrow">Case 03 · Ecosystems</p>
+            <h2>Which lodash version fixed the prototype pollution?</h2>
+            <p class="lede">
+              Package advisories carry the range that introduced the problem
+              and the version that fixed it, so the answer can name the
+              upgrade.
+            </p>
+            <div class="code-block">
+              <div class="code-header">
+                <span>crowbar advisory --package lodash --ecosystem npm</span>
+              </div>
+              <pre><code>GHSA-jf85-cpcp-j695  prototype pollution in lodash
+  range  introduced 0.0.0  fixed 4.17.12
+GHSA-p6mc-m468-83gw  lodash.set prototype pollution
+  range  introduced 0.0.0  fixed 4.17.17</code></pre>
+            </div>
+            <p>
+              The same advisory ids travel with the CVE record, so a triage
+              answer and a package answer never disagree.
+            </p>
+          </section>
+
+          <section class="article-section" id="poc-lookup">
+            <p class="eyebrow">Case 04 · Proof of concept</p>
+            <h2>Is there public exploit code for this?</h2>
+            <p class="lede">
+              Search by CVE, by description, or by a fragment of the code
+              itself. Crowbar hands over the source; it never runs it.
+            </p>
+            <div class="code-block">
+              <div class="code-header">
+                <span>crowbar code "jndi lookup ldap"</span>
+              </div>
+              <pre><code>data/exploitdb/full/.../50592.java
+  … Payload.createBase64("ldap://…/Exploit") …
+  … new JndiLookupHandler().lookup(…) …</code></pre>
+            </div>
+            <p>
+              The Nuclei templates and Metasploit modules for the same CVE are
+              one command away, and public repository metadata is indexed
+              too, so an agent can point at a reproduction without cloning
+              anything.
+            </p>
+            <p class="caption">
+              Treat every downloaded exploit as untrusted code. Use a
+              disposable VM.
+            </p>
+          </section>
+        </article>
+      </div>
+    </main>
+
+    <!-- prettier-ignore -->
+    <footer class="site-footer">
+      <div class="container footer-inner">
+        <p>crowbar · A CVE index inside your codebase</p>
+        <div class="footer-links">
+          <a href="https://github.com/kushvinth/crowbar">Source</a
+          ><a href="https://pypi.org/project/crowbar-cli/">PyPI</a
+          ><a href="https://github.com/kushvinth/crowbar/blob/main/LICENSE">MIT license</a
+          ><a href="https://github.com/kushvinth/crowbar/blob/main/SECURITY.md">Security</a
+          ><a href="../get-started/">Setup guide</a>
+        </div>
+      </div>
+    </footer>
+    <p class="sr-only" id="copy-status" role="status" aria-live="polite"></p>
+    <a class="back-to-top" href="#top" aria-label="Back to top">
+      <span aria-hidden="true">↑</span> Top
+    </a>
+  </body>
+</html>

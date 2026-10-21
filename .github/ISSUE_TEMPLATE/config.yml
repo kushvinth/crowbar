@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability in crowbar
+    url: https://github.com/kushvinth/crowbar/security/advisories/new
+    about: Report security issues privately via the Security tab - never in a public issue.
+  - name: Question / discussion
+    url: https://github.com/kushvinth/crowbar/discussions
+    about: Ask how to use crowbar or propose an idea.
+  - name: Documentation
+    url: https://crowbar.kushvinth.com
+    about: Install, tiers, agent setup, and the full command reference.

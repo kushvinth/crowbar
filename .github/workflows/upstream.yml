@@ -1,0 +1,112 @@
+name: upstream
+
+# Real data, real network: catches upstream feed format changes and proves the
+# index keeps itself fresh. Too slow and too network-bound for every PR.
+on:
+  schedule:
+    - cron: "17 4 * * *"
+  push:
+    branches: [main]
+    paths: ["crowbar/**", ".github/workflows/upstream.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: upstream
+  cancel-in-progress: false
+
+env:
+  CROWBAR_HOME: ${{ github.workspace }}/../cb-home
+
+jobs:
+  lite:
+    name: lite index + auto-update e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - name: Sync + build the lite tier
+        run: |
+          ./bin/crowbar sync --tier lite
+          ./bin/crowbar build --tier lite
+          ./bin/crowbar doctor
+
+      # shortcut: tests/test_corpus.py assumes the full corpus (Nuclei, MSF, MSRC, ...)
+      # and runs locally in pre-commit; make it tier-aware to run it here
+      - name: Lite index answers what lite promises
+        run: |
+          ./bin/crowbar kev --json --limit 5 | jq -e 'length == 5'
+          ./bin/crowbar search "remote code execution" --limit 3 --json | jq -e 'length > 0'
+          # every KEV row carries EPSS, even CVEs outside lite's two NVD years
+          ./bin/crowbar sql "select count(*) n, count(epss) e from kev" --json | jq -e '.[0].n > 1000 and .[0].n == .[0].e'
+          ./bin/crowbar cve CVE-2021-44228 2>&1 | grep -q "CISA KEV"
+          ./bin/crowbar sql "select count(*) n from cve" --json | jq -e '.[0].n > 20000'
+
+      - name: Aged index refreshes itself in the background
+        run: |
+          age() {  # rewind state.json by $1 days
+            python3 - "$1" <<'PY'
+          import json, os, pathlib, sys, time
+          p = pathlib.Path(os.environ["CROWBAR_HOME"]) / "index/state.json"
+          s = json.loads(p.read_text())
+          ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - float(sys.argv[1]) * 86400))
+          s["built_at"] = s["updated_at"] = ts
+          p.write_text(json.dumps(s))
+          print("aged to", ts)
+          PY
+          }
+          age 2
+          rm -f "$CROWBAR_HOME/index/update.lock"
+          ./bin/crowbar stats >/dev/null 2>/tmp/stderr.txt
+          grep -q "refreshing in the background" /tmp/stderr.txt
+          for _ in $(seq 60); do
+            python3 -c "import sys; sys.path.insert(0, '.'); from crowbar import datasets; sys.exit(datasets.index_status()['age_days'] >= 1)" && break
+            sleep 10
+          done
+          cat "$CROWBAR_HOME/index/update.log" || true
+          python3 -c "import sys; sys.path.insert(0, '.'); from crowbar import datasets; s = datasets.index_status(); print(s); assert s['age_days'] < 1"
+          ! grep -q Traceback "$CROWBAR_HOME/index/update.log"
+
+      - name: Index older than the NVD change window rebuilds instead of patching
+        run: |
+          python3 - <<'PY'
+          import json, os, pathlib, time
+          p = pathlib.Path(os.environ["CROWBAR_HOME"]) / "index/state.json"
+          s = json.loads(p.read_text())
+          s["built_at"] = s["updated_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - 10 * 86400))
+          p.write_text(json.dumps(s))
+          PY
+          ./bin/crowbar update
+          python3 -c "import sys; sys.path.insert(0, '.'); from crowbar import datasets; s = datasets.index_status(); print(s); assert not s['stale']"
+          ./bin/crowbar doctor
+
+      - name: MCP reports freshness
+        run: |
+          printf '%s\n' \
+            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}' \
+            '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"cb_stats","arguments":{}}}' \
+            | CROWBAR_NO_AUTO_UPDATE=1 python3 mcp/server.py \
+            | jq -s -e '.[1].result.content[0].text | fromjson | .index.stale == false'
+
+  report:
+    name: open an issue on scheduled failure
+    needs: [lite]
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh issue list -R "$GITHUB_REPOSITORY" --label upstream --state open --json number -q '.[0].number' | grep -q . \
+            || gh issue create -R "$GITHUB_REPOSITORY" --label upstream \
+                 --title "Nightly upstream build failed" \
+                 --body "The nightly lite build or the auto-update check failed: $RUN"

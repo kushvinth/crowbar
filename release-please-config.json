@@ -1,0 +1,99 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "release-type": "python",
+  "include-v-in-tag": true,
+  "changelog-sections": [
+    {
+      "type": "feat",
+      "section": "Features",
+      "hidden": false
+    },
+    {
+      "type": "fix",
+      "section": "Bug Fixes",
+      "hidden": false
+    },
+    {
+      "type": "perf",
+      "section": "Performance Improvements",
+      "hidden": false
+    },
+    {
+      "type": "refactor",
+      "section": "Code Refactoring",
+      "hidden": false
+    },
+    {
+      "type": "docs",
+      "section": "Documentation",
+      "hidden": false
+    },
+    {
+      "type": "test",
+      "section": "Tests",
+      "hidden": false
+    },
+    {
+      "type": "chore",
+      "section": "Chores",
+      "hidden": true
+    },
+    {
+      "type": "ci",
+      "section": "Continuous Integration",
+      "hidden": false
+    }
+  ],
+  "packages": {
+    ".": {
+      "package-name": "crowbar-cli",
+      "release-as": "0.1.0",
+      "extra-files": [
+        {
+          "type": "generic",
+          "path": "crowbar/__init__.py"
+        },
+        {
+          "type": "json",
+          "path": "server.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "server.json",
+          "jsonpath": "$.packages[0].version"
+        },
+        {
+          "type": "json",
+          "path": ".claude-plugin/plugin.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "gemini-extension.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": ".codex-plugin/plugin.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "yaml",
+          "path": "plugin.yaml",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "generic",
+          "path": "flake.nix"
+        }
+      ]
+    }
+  },
+  "include-component-in-tag": false
+}

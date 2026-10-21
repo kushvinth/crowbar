@@ -1,0 +1,45 @@
+name: pr
+
+on:
+  pull_request_target:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  pull-requests: read
+
+jobs:
+  title:
+    # release-please builds the changelog from these, so they must be Conventional Commits
+    name: conventional PR title
+    runs-on: ubuntu-latest
+    steps:
+      - uses: amannn/action-semantic-pull-request@v6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            perf
+            refactor
+            docs
+            test
+            chore
+            ci
+            build
+            style
+            revert
+
+  dependency-review:
+    name: dependency review
+    # needs the dependency graph, which a private repo on this plan lacks; runs once public
+    if: ${{ !github.event.repository.private }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/dependency-review-action@v5
+        with:
+          base-ref: ${{ github.event.pull_request.base.sha }}
+          head-ref: ${{ github.event.pull_request.head.sha }}
+          fail-on-severity: high

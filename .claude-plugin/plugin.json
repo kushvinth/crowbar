@@ -1,0 +1,25 @@
+{
+  "name": "crowbar",
+  "version": "0.1.0",
+  "description": "Retrieve CVEs and index them inside your codebase: a local SQLite index of CVEs, exploits and advisories that any tool in your repo can query.",
+  "author": {
+    "name": "kushvinth",
+    "url": "https://github.com/kushvinth"
+  },
+  "homepage": "https://github.com/kushvinth/crowbar",
+  "repository": "https://github.com/kushvinth/crowbar",
+  "license": "MIT",
+  "keywords": [
+    "security",
+    "cve",
+    "vulnerability",
+    "mcp",
+    "offline",
+    "nvd",
+    "kev",
+    "epss",
+    "exploit"
+  ],
+  "mcpServers": "./.mcp.json",
+  "skills": "./skills/"
+}

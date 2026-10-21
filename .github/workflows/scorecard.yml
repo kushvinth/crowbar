@@ -1,0 +1,32 @@
+name: scorecard
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "23 5 * * 1"
+  workflow_dispatch:
+
+permissions: read-all
+
+jobs:
+  analysis:
+    name: OpenSSF scorecard
+    # code scanning needs a public repo (or GHAS); runs by itself once public
+    if: ${{ !github.event.repository.private }}
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ossf/scorecard-action@v2.5.0
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true
+      - uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: results.sarif
