@@ -15,3 +15,12 @@ updates:
       interval: weekly
     commit-message:
       prefix: build
+  - package-ecosystem: pip
+    directory: /packaging/docker
+    schedule:
+      interval: weekly
+    groups:
+      docker-build:
+        patterns: ["*"]
+    commit-message:
+      prefix: build

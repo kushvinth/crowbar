@@ -27,7 +27,7 @@ to `main`, `release-please` opens/updates a release PR; merging it tags
 
 So after the one-time setup, **publishing = merge the release PR**.
 
-The first cut is pinned: `release-as: 0.1.0` in `release-please-config.json` makes the release PR propose 0.1.0 whatever the commits since say. **Delete that line right after v0.1.0 is tagged**, or every later release PR proposes 0.1.0 again.
+v0.1.0 was cut with a temporary `release-as: 0.1.0` pin in `release-please-config.json`, removed once tagged; versions now follow the Conventional Commits since the last release.
 
 Registries publish only once switched on: set the repo variables `PUBLISH_NPM` / `PUBLISH_PYPI` to `true` (Settings > Secrets and variables > Actions > Variables). npm needs `NPM_TOKEN` to be a granular token with "bypass 2FA" enabled; PyPI needs the trusted publisher (owner `kushvinth`, repo `crowbar`, workflow `release.yml`, environment `pypi`). To publish an existing release to a registry switched on later, run the `release` workflow by hand with that tag (e.g. `gh workflow run release -f tag=v0.1.0`); versions already on a registry are skipped.
 

@@ -81,10 +81,21 @@ export function describe(step, remove = false) {
   }
 }
 
-function backup(file, stamp) {
-  if (!fs.existsSync(file)) return null;
+// One read per file: the backup and the edit both start from this text, so
+// nothing can change the file between a check and its use.
+function readText(file) {
+  try {
+    return fs.readFileSync(file, "utf8");
+  } catch (e) {
+    if (e.code === "ENOENT") return null;
+    throw e;
+  }
+}
+
+function backup(file, text, stamp) {
+  if (text === null) return null;
   const dst = `${file}.crowbar-backup-${stamp}`;
-  fs.copyFileSync(file, dst);
+  fs.writeFileSync(dst, text);
   return dst;
 }
 
@@ -104,11 +115,12 @@ export function apply(step, stamp = Date.now()) {
     return "registered";
   }
   fs.mkdirSync(path.dirname(step.file), { recursive: true });
-  const text = fs.existsSync(step.file) ? fs.readFileSync(step.file, "utf8") : "";
+  const original = readText(step.file);
+  const text = original ?? "";
   if (step.kind === "toml") {
     const header = `[${step.table}]`;
     if (text.split(/\r?\n/).some((l) => l.trim() === header)) return "already registered";
-    const saved = backup(step.file, stamp);
+    const saved = backup(step.file, original, stamp);
     const sep = text && !text.endsWith("\n") ? "\n\n" : text ? "\n" : "";
     fs.writeFileSync(step.file, `${text}${sep}${header}\n${step.body}`);
     return saved ? `updated (backup ${path.basename(saved)})` : "created";
@@ -120,7 +132,7 @@ export function apply(step, stamp = Date.now()) {
     // JSONC with comments or a broken file: leave it alone rather than rewrite it
     throw new Error(`${step.file} is not plain JSON - add crowbar by hand (npx crowbar-cli prints the block)`);
   }
-  const saved = backup(step.file, stamp);
+  const saved = backup(step.file, original, stamp);
   step.mutate(cfg);
   fs.writeFileSync(step.file, JSON.stringify(cfg, null, 2) + "\n");
   return saved ? `updated (backup ${path.basename(saved)})` : "created";
@@ -141,8 +153,8 @@ export function unapply(step, stamp = Date.now()) {
     if (r.status !== 0) throw new Error((r.stderr || r.stdout || "failed").trim());
     return "unregistered";
   }
-  if (!fs.existsSync(step.file)) return "not registered";
-  const text = fs.readFileSync(step.file, "utf8");
+  const text = readText(step.file);
+  if (text === null) return "not registered";
   if (step.kind === "toml") {
     const lines = text.split(/\r?\n/);
     const start = lines.findIndex((l) => l.trim() === `[${step.table}]`);
@@ -151,7 +163,7 @@ export function unapply(step, stamp = Date.now()) {
     while (end < lines.length && !(/^\s*\[/.test(lines[end]) && !lines[end].trim().startsWith(`[${step.table}.`))) end++;
     let from = start;      // and takes the blank lines setup put before it
     while (from > 0 && !lines[from - 1].trim()) from--;
-    const saved = backup(step.file, stamp);
+    const saved = backup(step.file, text, stamp);
     const rest = [...lines.slice(0, from), ...(from && end < lines.length ? [""] : []), ...lines.slice(end)];
     fs.writeFileSync(step.file, rest.join("\n").replace(/\n*$/, rest.some((l) => l.trim()) ? "\n" : ""));
     return `removed (backup ${path.basename(saved)})`;
@@ -162,9 +174,10 @@ export function unapply(step, stamp = Date.now()) {
   } catch {
     throw new Error(`${step.file} is not plain JSON - remove crowbar by hand`);
   }
-  if (!cfg[step.key]?.crowbar) return "not registered";
-  const saved = backup(step.file, stamp);
-  delete cfg[step.key].crowbar;
+  const servers = Object.hasOwn(cfg, step.key) ? cfg[step.key] : null;
+  if (!servers || typeof servers !== "object" || !Object.hasOwn(servers, "crowbar")) return "not registered";
+  const saved = backup(step.file, text, stamp);
+  delete servers.crowbar;
   fs.writeFileSync(step.file, JSON.stringify(cfg, null, 2) + "\n");
   return `removed (backup ${path.basename(saved)})`;
 }

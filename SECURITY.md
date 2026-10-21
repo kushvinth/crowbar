@@ -8,21 +8,23 @@ resolved.
 
 ## Reporting a vulnerability
 
-Use **Report a vulnerability** in the repository's **Security** tab to submit
-the report privately. Do not open a public issue to request a private contact
+Report it privately through GitHub's private vulnerability reporting:
+<https://github.com/kushvinth/crowbar/security/advisories/new>
+(**Security** tab > **Report a vulnerability**). Do not open a public issue to request a private contact
 channel, and do not include working exploit payloads, credentials, or private
 target data in the report.
 
 Include the affected crowbar version, your OS, how you installed it
 (`uvx`, `pip`, `git`), the dataset tier in use, impact, and reproduction steps.
 
-The maintainer will acknowledge the report, assess scope, and coordinate
-remediation and disclosure timing with the reporter.
+The maintainer acknowledges reports within 7 days, assesses scope, and
+coordinates a fix and disclosure timing with the reporter. Fixed issues are
+published as GitHub security advisories.
 
 ## Security boundary
 
 crowbar is a **read-only, offline index**. The CLI and MCP server open the
-SQLite database read-only (`PRAGMA query_only`), and `hv sql` rejects writes and
+SQLite database read-only (`PRAGMA query_only`), and `crowbar sql` rejects writes and
 DDL. No tool clones, compiles, or executes exploit code.
 
 What crowbar indexes is untrusted upstream content: CVE text, advisory pages,
