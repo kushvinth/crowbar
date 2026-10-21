@@ -18,7 +18,7 @@ say so.**
    `cb_exploit`, `cb_nuclei`, `cb_msf`, `cb_os`, `cb_advisory`, `cb_poc`,
    `cb_code`, `cb_attack`, `cb_cwe`, `cb_sql`, `cb_stats` (20 tools).
 2. **CLI**: `crowbar <cmd> --json` (installed via `uvx crowbar-cli` / `pip install
-   crowbar`), or `.crowbar/bin/crowbar` in a linked project.
+   crowbar-cli`), or `.crowbar/bin/crowbar` in a linked project.
 3. **SQL**: read-only on `index/crowbar.db`. Schema in `AGENTS.md`.
 
 ## First run - set it up yourself, don't make the user touch a CLI
