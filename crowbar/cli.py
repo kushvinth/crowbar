@@ -10,6 +10,7 @@ import sqlite3
 import subprocess
 import sys
 import textwrap
+import threading
 import time
 from typing import NoReturn
 
@@ -30,6 +31,46 @@ def out_json(obj) -> None:
 def die(msg: str, code: int = 1) -> NoReturn:
     print(msg, file=sys.stderr)
     sys.exit(code)
+
+
+class Spinner:
+    """Animated status line on a terminal; plain prints everywhere else."""
+    FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+
+    def __init__(self, label: str):
+        self.label, self.live = label, sys.stdout.isatty()
+        self._lock, self._stop = threading.Lock(), threading.Event()
+        self._t0 = time.time()
+
+    def __enter__(self):
+        if self.live:
+            threading.Thread(target=self._spin, daemon=True).start()
+        return self
+
+    def __exit__(self, *_):
+        self._stop.set()
+        with self._lock:
+            self._clear()
+
+    def _clear(self) -> None:
+        if self.live:
+            sys.stdout.write("\r\033[K")
+            sys.stdout.flush()
+
+    def _spin(self) -> None:
+        i = 0
+        while not self._stop.wait(0.1):
+            with self._lock:
+                cols = shutil.get_terminal_size().columns
+                line = f"{self.FRAMES[i % len(self.FRAMES)]} {self.label} ({time.time() - self._t0:.0f}s)"
+                sys.stdout.write(f"\r\033[K{CYN}{line[:cols - 1]}{RST}")
+                sys.stdout.flush()
+            i += 1
+
+    def say(self, msg: str, err: bool = False) -> None:
+        with self._lock:
+            self._clear()
+            print(msg, file=sys.stderr if err else sys.stdout, flush=True)
 
 
 def money(v) -> str:
@@ -558,13 +599,13 @@ def cmd_where(args) -> None:
 
 
 # ---------------------------------------------------------------- data ops
-def _report(r: dict) -> None:
+def _report(r: dict, say) -> None:
     if r["status"] == "FAIL":
-        print(f"  FAIL {r['name']:<22} {r.get('error', '')}", file=sys.stderr)
+        say(f"  {RED}FAIL{RST} {r['name']:<22} {r.get('error', '')}", err=True)
     elif r["status"] in ("same", "exists"):
-        print(f"  same {r['name']:<22}")
+        say(f"  {DIM}same{RST} {r['name']:<22}")
     else:
-        print(f"  ok   {r['name']:<22} {datasets.human(r.get('bytes', 0)):>9s}")
+        say(f"  {GRN}ok{RST}   {r['name']:<22} {datasets.human(r.get('bytes', 0)):>9s}")
 
 
 def _record_tier(tier: str) -> None:
@@ -600,8 +641,15 @@ def cmd_sync(args) -> None:
         die("nothing selected")
     print(f"syncing {len(items)} datasets -> {paths.DATA}"
           + (f" (tier {args.tier})" if getattr(args, "tier", None) else ""))
-    results = datasets.sync(items, force=args.force, jobs=args.jobs,
-                            pull=args.pull, progress=_report)
+    pending = [d.name for d in items]
+    with Spinner("downloading") as sp:
+        def progress(r: dict) -> None:
+            pending.remove(r["name"])
+            sp.label = f"downloading {len(items) - len(pending)}/{len(items)}: {', '.join(pending)}"
+            _report(r, sp.say)
+        sp.label = f"downloading 0/{len(items)}: {', '.join(pending)}"
+        results = datasets.sync(items, force=args.force, jobs=args.jobs,
+                                pull=args.pull, progress=progress)
     bad = [r for r in results if r["status"] == "FAIL"]
     print(f"{len(results) - len(bad)}/{len(results)} ready")
     if bad:
@@ -622,9 +670,13 @@ def cmd_build(args) -> None:
         if missing:
             print(f"{YEL}WARNING: building an incomplete {args.tier} index "
                   f"(missing {', '.join(missing)}){RST}", file=sys.stderr)
-    _prog = (lambda msg: print(msg, file=sys.stderr)) if args.json else print
-    stats = indexer.build(quick=args.quick, with_extra=args.extra,
-                          with_bulk=args.bulk, progress=_prog)
+    if args.json:
+        stats = indexer.build(quick=args.quick, with_extra=args.extra, with_bulk=args.bulk,
+                              progress=lambda msg: print(msg, file=sys.stderr))
+    else:
+        with Spinner("building index") as sp:
+            stats = indexer.build(quick=args.quick, with_extra=args.extra, with_bulk=args.bulk,
+                                  progress=lambda msg: sp.say(f"  {GRN}✓{RST} {msg}"))
     if args.json:
         out_json(stats)
         return

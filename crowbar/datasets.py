@@ -7,13 +7,16 @@ import hashlib
 import json
 import os
 import pathlib
+import random
 import re
 import shutil
 import sqlite3
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 
@@ -26,6 +29,16 @@ except ImportError:  # Windows
 
 from crowbar import __version__ as _V
 UA = f"crowbar/{_V} (+https://github.com/kushvinth/crowbar)"
+
+# NVD's CDN resets connections when one client opens several at once
+_HOST_SLOTS: dict[str, threading.BoundedSemaphore] = {}
+_HOST_LOCK = threading.Lock()
+
+
+def _host_slot(url: str) -> threading.BoundedSemaphore:
+    host = urllib.parse.urlsplit(url).hostname or ""
+    with _HOST_LOCK:
+        return _HOST_SLOTS.setdefault(host, threading.BoundedSemaphore(2))
 
 
 @dataclass
@@ -259,7 +272,7 @@ def human(n: float) -> str:
     return f"{n:.1f}GB"
 
 
-def http_get(url: str, dest: pathlib.Path, retries: int = 4, timeout: int = 180,
+def http_get(url: str, dest: pathlib.Path, retries: int = 7, timeout: int = 180,
              since: str | None = None) -> tuple[int, str] | None:
     """Download atomically. Returns (bytes, last_modified) or None on HTTP 304."""
     import email.utils  # noqa: F401
@@ -279,7 +292,7 @@ def http_get(url: str, dest: pathlib.Path, retries: int = 4, timeout: int = 180,
             if have:
                 headers["Range"] = f"bytes={have}-"   # resume a truncated download
             req = urllib.request.Request(url, headers=headers)
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
+            with _host_slot(url), urllib.request.urlopen(req, timeout=timeout) as resp:
                 if resp.status == 304:
                     return None
                 partial = resp.status == 206
@@ -316,7 +329,7 @@ def http_get(url: str, dest: pathlib.Path, retries: int = 4, timeout: int = 180,
             grew = tmp.exists() and tmp.stat().st_size > start
             failures = 0 if grew else failures + 1
         if failures < retries:
-            time.sleep(min(2 ** max(failures, 1), 10))
+            time.sleep(min(2 ** max(failures, 1), 30) + random.uniform(0, 2))
     if tmp.exists():
         tmp.unlink()                         # give up cleanly; never leave a partial behind
     raise RuntimeError(f"download failed: {url}: {last}")
