@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/kushvinth/crowbar/compare/v0.1.1...v0.1.2) (2026-10-21)
+
+
+### Documentation
+
+* **skill:** the PyPI package is crowbar-cli ([0eb1a2d](https://github.com/kushvinth/crowbar/commit/0eb1a2df9e0446f2b91db8da7f052879e901fcbe))
+
 ## [0.1.1](https://github.com/kushvinth/crowbar/compare/v0.1.0...v0.1.1) (2026-10-21)
 
 
