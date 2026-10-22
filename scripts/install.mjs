@@ -248,7 +248,10 @@ async function setup(argv) {
     const noIndex = argv.includes("--no-index");
     if (!noIndex && await ask("\nBuild the local CVE index now (lite tier, ~150 MB, a few minutes)?")) {
       const run = (args) => spawnSync(uvx, ["crowbar-cli", ...args], { stdio: "inherit" }).status === 0;
-      if (!(run(["sync", "--tier", "lite"]) && run(["build", "--tier", "lite"]))) {
+      const synced = run(["sync", "--tier", "lite"]);
+      // NVD drops connections often: index what arrived, the next sync fills the gap
+      if (!synced) console.log(warn("Some downloads failed.") + " Building with what arrived.");
+      if (!run(["build", "--tier", "lite", ...(synced ? [] : ["--allow-incomplete"])])) {
         console.log(warn("Index build did not finish.") + " Your agent will build it on first use, or run:");
         console.log(`  ${b("uvx crowbar-cli sync --tier lite && uvx crowbar-cli build --tier lite")}`);
       }
