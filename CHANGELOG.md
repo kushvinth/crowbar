@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.3](https://github.com/kushvinth/crowbar/compare/v0.1.2...v0.1.3) (2026-10-22)
+
+
+### Bug Fixes
+
+* **sync:** survive flaky NVD downloads and show progress ([#5](https://github.com/kushvinth/crowbar/issues/5)) ([bd58a74](https://github.com/kushvinth/crowbar/commit/bd58a742edee0979cf993bee75e27aff7b06a729))
+
 ## [0.1.2](https://github.com/kushvinth/crowbar/compare/v0.1.1...v0.1.2) (2026-10-21)
 
 
