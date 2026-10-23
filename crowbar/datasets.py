@@ -414,17 +414,25 @@ def git_clone(url: str, dest: pathlib.Path, pull: bool = False,
     dest.parent.mkdir(parents=True, exist_ok=True)
     if dest.exists() and not any(dest.iterdir()):
         dest.rmdir()
+    target = dest
+    if dest.exists():
+        # a mirror extract (no .git): clone beside it and swap, so a failed clone keeps it
+        target = dest.with_name(dest.name + ".clone")
+        shutil.rmtree(target, ignore_errors=True)
     cmd = ["git", "clone", "--depth", "1", "--single-branch"]
     if sparse:
         cmd += ["--filter=blob:none", "--sparse"]
-    cmd += [url, str(dest)]
+    cmd += [url, str(target)]
     res = subprocess.run(cmd, capture_output=True, text=True)
     if res.returncode == 0 and sparse:
-        subprocess.run(["git", "-C", str(dest), "sparse-checkout", "set", sparse],
+        subprocess.run(["git", "-C", str(target), "sparse-checkout", "set", sparse],
                        capture_output=True, text=True)
     if res.returncode != 0:
         tail = (res.stderr or res.stdout).strip().splitlines()[-1:] or ["git clone failed"]
         raise RuntimeError(f"{url}: {tail[0]}")
+    if target != dest:
+        shutil.rmtree(dest)
+        target.replace(dest)
     return "cloned"
 
 
@@ -446,23 +454,26 @@ def mirror_one(d: Dataset, entry: dict, base: str, manifest: dict, force: bool =
     started = time.time()
     url = f"{base}/{urllib.parse.quote(entry['file'])}"
     dl = d.path.with_name(d.path.name + ".mirror")
-    http_get(url, dl)
-    if sha256(dl) != entry["sha256"]:
-        dl.unlink()
-        raise RuntimeError(f"{url}: sha256 does not match the mirror manifest")
-    if entry.get("dir"):
-        new = d.path.with_name(d.path.name + ".new")
+    new = d.path.with_name(d.path.name + ".new")
+    try:
+        http_get(url, dl, retries=2)        # a cache: give up fast, upstream retries fully
+        if sha256(dl) != entry["sha256"]:
+            raise RuntimeError(f"{url}: sha256 does not match the mirror manifest")
+        if entry.get("dir"):
+            shutil.rmtree(new, ignore_errors=True)
+            with tarfile.open(dl) as tf:
+                # filter= needs Python >= 3.11.4; rejects absolute paths, .. and devices
+                tf.extractall(new, filter="data")
+            if d.path.exists():
+                shutil.rmtree(d.path)
+            new.replace(d.path)
+            digest = ""                      # verify hashes files; a dir has no single hash
+        else:
+            dl.replace(d.path)
+            digest = entry["sha256"]
+    finally:
+        dl.unlink(missing_ok=True)
         shutil.rmtree(new, ignore_errors=True)
-        with tarfile.open(dl) as tf:
-            tf.extractall(new, filter="data")   # rejects absolute paths, .. and devices
-        dl.unlink()
-        if d.path.exists():
-            shutil.rmtree(d.path)
-        new.replace(d.path)
-        digest = ""                          # verify hashes files; a dir has no single hash
-    else:
-        dl.replace(d.path)
-        digest = entry["sha256"]
     size = entry.get("bytes") or d.path.stat().st_size
     manifest["datasets"][d.name] = {
         "group": d.group, "url": url, "path": d.dest, "bytes": size,
@@ -483,7 +494,8 @@ def sync_one(d: Dataset, manifest: dict, force: bool = False, pull: bool = False
         try:
             return mirror_one(d, mirror[1][d.name], mirror[0], manifest, force)
         except Exception as exc:  # noqa: BLE001
-            return {"name": d.name, "status": "FAIL", "error": str(exc)[:300]}
+            # upstream is the source of truth, so this is safe for a tampered file too
+            print(f"mirror: {d.name}: {str(exc)[:200]}; using upstream", file=sys.stderr)
     started = time.time()
     lm = ""
     drift = False

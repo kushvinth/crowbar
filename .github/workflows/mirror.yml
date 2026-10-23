@@ -11,7 +11,10 @@ on:
   workflow_dispatch:
     inputs:
       tier:
-        description: "Tier to mirror (lite | medium | heavy | extreme)"
+        # heavy/extreme add Exploit-DB (no redistribution), MSRC and Apple pages
+        description: "Tier to mirror (only tiers whose sources may be redistributed)"
+        type: choice
+        options: [lite, medium]
         default: "medium"
 
 permissions:
@@ -49,7 +52,7 @@ jobs:
         run: |
           gh release view data >/dev/null 2>&1 \
             || gh release create data --title "crowbar data mirror" --latest=false \
-                 --notes "Dataset mirror for CROWBAR_MIRROR. Rebuilt nightly; see manifest.json."
+                 --notes "Dataset mirror for CROWBAR_MIRROR, rebuilt nightly; see manifest.json. Unmodified copies of: NVD, CISA KEV and Vulnrichment (US government, public domain); FIRST EPSS; MITRE CVE List, CWE, CAPEC and ATT&CK (MITRE terms of use, attribution required). Each source's license: docs/DATASETS.md."
           # data first, manifest last: a client never sees hashes for files not yet uploaded
           find "$RUNNER_TEMP/mirror" -type f ! -name manifest.json -print0 \
             | xargs -0 gh release upload data --clobber

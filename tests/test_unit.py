@@ -767,7 +767,8 @@ class TestMirror(unittest.TestCase):
         threading.Thread(target=srv.serve_forever, daemon=True).start()
         env = {"CROWBAR_MIRROR": f"http://127.0.0.1:{srv.server_port}/"}
         try:
-            with home(dst), mock.patch.dict(os.environ, env):
+            with home(dst), mock.patch.dict(os.environ, env), \
+                    mock.patch.object(datasets.time, "sleep"):
                 res = {r["name"]: r for r in datasets.sync([kev, nuclei])}
                 self.assertEqual({r["status"] for r in res.values()}, {"ok"})
                 self.assertEqual(kev.path.read_text(), '{"vulnerabilities": []}')
@@ -777,12 +778,42 @@ class TestMirror(unittest.TestCase):
                                  "2026-01-01T00:00:00Z")
                 # unchanged mirror: nothing re-downloaded
                 self.assertEqual({r["status"] for r in datasets.sync([kev, nuclei])}, {"same"})
-                # tampered file: fails instead of landing
-                (out / "kev").write_text("evil")
-                r = datasets.sync([kev], force=True)[0]
-                self.assertEqual(r["status"], "FAIL")
-                self.assertIn("sha256", r["error"])
-                self.assertEqual(kev.path.read_text(), '{"vulnerabilities": []}')
+                # tampered or missing mirror file: never lands, falls back to upstream
+                real_get = datasets.http_get
+
+                def upstream_304(url, dest, **kw):
+                    return None if url == kev.url else real_get(url, dest, **kw)
+
+                for broken in ("tamper", "missing"):
+                    if broken == "tamper":
+                        (out / "kev").write_text("evil")
+                    else:
+                        (out / "kev").unlink()   # e.g. mid `--clobber` re-upload: 404
+                    with mock.patch.object(datasets, "http_get", side_effect=upstream_304) as get, \
+                            mock.patch("sys.stderr"):
+                        r = datasets.sync([kev], force=True)[0]
+                    self.assertEqual(r["status"], "same", broken)
+                    self.assertEqual(get.call_args[0][0], kev.url, broken)
+                    self.assertEqual(kev.path.read_text(), '{"vulnerabilities": []}')
+                    self.assertEqual(list(kev.path.parent.iterdir()), [kev.path], broken)
+                # mirrored git dataset (no .git): a later upstream sync re-clones it
+                # and swaps it in, and a failed clone keeps the mirrored copy
+                def clone(ok):
+                    def run(cmd, **kw):
+                        if ok and cmd[1] == "clone":
+                            (pathlib.Path(cmd[-1]) / ".git").mkdir(parents=True)
+                        return subprocess.CompletedProcess(cmd, 0 if ok else 128, "", "boom")
+                    return run
+
+                with mock.patch.dict(os.environ, {"CROWBAR_MIRROR": ""}):
+                    with mock.patch.object(datasets.subprocess, "run", side_effect=clone(False)):
+                        self.assertEqual(datasets.sync([nuclei])[0]["status"], "FAIL")
+                    self.assertTrue((nuclei.path / "http" / "t.yaml").exists())
+                    with mock.patch.object(datasets.subprocess, "run", side_effect=clone(True)):
+                        self.assertEqual(datasets.sync([nuclei])[0]["status"], "ok")
+                    self.assertTrue((nuclei.path / ".git").exists())
+                    self.assertFalse((nuclei.path / "http").exists())
+                    self.assertFalse(nuclei.path.with_name("templates.clone").exists())
                 # a dataset the mirror lacks goes upstream (stubbed here)
                 epss = datasets.plan(only=["epss"])[0]
                 with mock.patch.object(datasets, "http_get", return_value=None) as up:
