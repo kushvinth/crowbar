@@ -5,6 +5,20 @@ Everything is downloaded unmodified into `data/` and recorded in
 tier). Re-syncs use sha256 plus `If-Modified-Since`; an unchanged feed costs a
 304, not a download.
 
+## Mirror (`crowbar pack`, `CROWBAR_MIRROR`)
+
+`crowbar pack <dir>` writes every synced dataset into one flat folder: files
+as-is, directories (git clones, Apple pages) as `<name>.tar.gz` without `.git`,
+plus a `manifest.json` with each file's sha256. Host that folder anywhere -
+GitHub Releases (`.github/workflows/mirror.yml`, enabled by the repo variable
+`PUBLISH_MIRROR=true`), S3, any static server - and set
+`CROWBAR_MIRROR=<url of the folder>` (or `DEFAULT_MIRROR` in
+`crowbar/datasets.py` for every user). `sync`, `update` and the background
+refresh then download from the mirror, reject any file whose sha256 differs from
+its manifest, and fall back to upstream for datasets the mirror does not carry
+or when it is unreachable. `CROWBAR_MIRROR=` (empty) forces upstream.
+Redistributing a source must be allowed by its license (see the tables below).
+
 ## Core (default)
 
 | dataset | source | file | shape | cadence |

@@ -1,0 +1,56 @@
+name: mirror
+
+# Publishes `crowbar pack` output as assets of the `data` GitHub release, so users
+# with CROWBAR_MIRROR=https://github.com/<owner>/<repo>/releases/download/data
+# (or DEFAULT_MIRROR in crowbar/datasets.py) sync from here instead of upstream.
+# Runs only once the repo variable PUBLISH_MIRROR = "true". Any static host works
+# instead: upload the same folder there.
+on:
+  schedule:
+    - cron: "43 5 * * *"
+  workflow_dispatch:
+    inputs:
+      tier:
+        description: "Tier to mirror (lite | medium | heavy | extreme)"
+        default: "medium"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mirror
+  cancel-in-progress: false
+
+env:
+  CROWBAR_HOME: ${{ github.workspace }}/../cb-home
+  CROWBAR_MIRROR: ""   # always pull upstream here, never from ourselves
+
+jobs:
+  publish:
+    if: vars.PUBLISH_MIRROR == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: write          # create/update the `data` release
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      - name: Sync and pack
+        env:
+          TIER: ${{ inputs.tier || 'medium' }}
+        run: |
+          ./bin/crowbar sync --tier "$TIER"
+          ./bin/crowbar pack "$RUNNER_TEMP/mirror"
+      - name: Upload to the data release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view data >/dev/null 2>&1 \
+            || gh release create data --title "crowbar data mirror" --latest=false \
+                 --notes "Dataset mirror for CROWBAR_MIRROR. Rebuilt nightly; see manifest.json."
+          # data first, manifest last: a client never sees hashes for files not yet uploaded
+          find "$RUNNER_TEMP/mirror" -type f ! -name manifest.json -print0 \
+            | xargs -0 gh release upload data --clobber
+          gh release upload data --clobber "$RUNNER_TEMP/mirror/manifest.json"

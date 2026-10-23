@@ -13,6 +13,7 @@ import shutil
 import sqlite3
 import subprocess
 import sys
+import tarfile
 import threading
 import time
 import urllib.error
@@ -29,6 +30,15 @@ except ImportError:  # Windows
 
 from crowbar import __version__ as _V
 UA = f"crowbar/{_V} (+https://github.com/kushvinth/crowbar)"
+
+# A mirror is a flat directory made by `crowbar pack`, hosted wherever the
+# maintainer chooses. Set it here to make it the default for every user;
+# CROWBAR_MIRROR overrides it, and CROWBAR_MIRROR= (empty) forces upstream.
+DEFAULT_MIRROR = ""
+
+
+def mirror_url() -> str:
+    return os.environ.get("CROWBAR_MIRROR", DEFAULT_MIRROR).rstrip("/")
 
 # NVD's CDN resets connections when one client opens several at once
 _HOST_SLOTS: dict[str, threading.BoundedSemaphore] = {}
@@ -428,8 +438,52 @@ def git_head(dest: pathlib.Path) -> str:
     return res.stdout.strip() if res.returncode == 0 else ""
 
 
-def sync_one(d: Dataset, manifest: dict, force: bool = False, pull: bool = False) -> dict:
+def mirror_one(d: Dataset, entry: dict, base: str, manifest: dict, force: bool = False) -> dict:
+    """Fetch one dataset from a `crowbar pack` mirror, verified against its sha256."""
     rec = manifest["datasets"].get(d.name, {})
+    if d.path.exists() and not force and rec.get("mirror_sha256") == entry["sha256"]:
+        return {"name": d.name, "status": "same", "bytes": rec.get("bytes", 0)}
+    started = time.time()
+    url = f"{base}/{urllib.parse.quote(entry['file'])}"
+    dl = d.path.with_name(d.path.name + ".mirror")
+    http_get(url, dl)
+    if sha256(dl) != entry["sha256"]:
+        dl.unlink()
+        raise RuntimeError(f"{url}: sha256 does not match the mirror manifest")
+    if entry.get("dir"):
+        new = d.path.with_name(d.path.name + ".new")
+        shutil.rmtree(new, ignore_errors=True)
+        with tarfile.open(dl) as tf:
+            tf.extractall(new, filter="data")   # rejects absolute paths, .. and devices
+        dl.unlink()
+        if d.path.exists():
+            shutil.rmtree(d.path)
+        new.replace(d.path)
+        digest = ""                          # verify hashes files; a dir has no single hash
+    else:
+        dl.replace(d.path)
+        digest = entry["sha256"]
+    size = entry.get("bytes") or d.path.stat().st_size
+    manifest["datasets"][d.name] = {
+        "group": d.group, "url": url, "path": d.dest, "bytes": size,
+        "sha256": digest, "mirror_sha256": entry["sha256"], "tier": d.tier,
+        # when the mirror fetched it upstream: keeps If-Modified-Since honest later
+        "fetched_at": entry.get("fetched_at")
+        or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "http_last_modified": "", "note": d.note,
+    }
+    return {"name": d.name, "status": "ok", "bytes": size, "via": "mirror",
+            "secs": round(time.time() - started, 1)}
+
+
+def sync_one(d: Dataset, manifest: dict, force: bool = False, pull: bool = False,
+             mirror: tuple[str, dict] | None = None) -> dict:
+    rec = manifest["datasets"].get(d.name, {})
+    if mirror and d.name in mirror[1]:
+        try:
+            return mirror_one(d, mirror[1][d.name], mirror[0], manifest, force)
+        except Exception as exc:  # noqa: BLE001
+            return {"name": d.name, "status": "FAIL", "error": str(exc)[:300]}
     started = time.time()
     lm = ""
     drift = False
@@ -478,8 +532,14 @@ def sync(items: list[Dataset], force: bool = False, jobs: int = 4,
          pull: bool = False, progress=None) -> list[dict]:
     manifest = load_manifest()
     results: list[dict] = []
+    mirror = None
+    if base := mirror_url():
+        try:
+            mirror = (base, json.loads(http_text(f"{base}/manifest.json"))["datasets"])
+        except Exception as exc:  # noqa: BLE001
+            print(f"mirror {base} unavailable ({exc}); using upstream sources", file=sys.stderr)
     with cf.ThreadPoolExecutor(max_workers=max(1, jobs)) as pool:
-        futs = {pool.submit(sync_one, d, manifest, force, pull): d for d in items}
+        futs = {pool.submit(sync_one, d, manifest, force, pull, mirror): d for d in items}
         for fut in cf.as_completed(futs):
             r = fut.result()
             results.append(r)
@@ -487,6 +547,32 @@ def sync(items: list[Dataset], force: bool = False, jobs: int = 4,
                 progress(r)
     save_manifest(manifest)
     return results
+
+
+def pack(out: pathlib.Path) -> dict:
+    """Write every synced dataset into `out` as a flat mirror for `CROWBAR_MIRROR`:
+    files as-is, directories as <name>.tar.gz (no .git), plus manifest.json."""
+    out.mkdir(parents=True, exist_ok=True)
+    entries: dict[str, dict] = {}
+    for name, rec in sorted(load_manifest().get("datasets", {}).items()):
+        src = paths.DATA / rec["path"]
+        if not src.exists():
+            continue
+        if src.is_dir():
+            dst = out / f"{name}.tar.gz"
+            with tarfile.open(dst, "w:gz") as tf:
+                for child in sorted(src.iterdir()):
+                    if child.name != ".git":
+                        tf.add(child, arcname=child.name)
+        else:
+            dst = out / name
+            shutil.copyfile(src, dst)
+        entries[name] = {"file": dst.name, "sha256": sha256(dst), "bytes": dst.stat().st_size,
+                         "dir": src.is_dir(), "fetched_at": rec.get("fetched_at")}
+    doc = {"crowbar": _V, "generated": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+           "datasets": entries}
+    (out / "manifest.json").write_text(json.dumps(doc, indent=2, sort_keys=True) + "\n")
+    return doc
 
 
 def freshness(manifest: dict | None = None) -> dict[str, dict]:

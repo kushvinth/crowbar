@@ -727,6 +727,75 @@ class TestResumableDownload(unittest.TestCase):
         self.assertEqual(dest.read_bytes(), body)
 
 
+class TestMirror(unittest.TestCase):
+    """`crowbar pack` output, served over HTTP, must sync back byte-for-byte."""
+
+    def test_pack_then_sync_from_mirror(self):
+        import functools
+        import http.server
+        import tempfile
+        import threading
+        from unittest import mock
+        tmp = pathlib.Path(tempfile.mkdtemp(prefix="cb-mirror-"))
+        src, dst, out = tmp / "src", tmp / "dst", tmp / "out"
+        kev, nuclei = datasets.plan(only=["kev"])[0], datasets.plan(only=["nuclei"])[0]
+
+        def home(root):
+            return mock.patch.multiple(paths, DATA=root / "data", INDEX=root / "index",
+                                       MANIFEST=root / "index" / "manifest.json")
+
+        with home(src):
+            kev.path.parent.mkdir(parents=True)
+            kev.path.write_text('{"vulnerabilities": []}')
+            (nuclei.path / "http").mkdir(parents=True)
+            (nuclei.path / "http" / "t.yaml").write_text("id: t\n")
+            (nuclei.path / ".git").mkdir()
+            datasets.save_manifest({"datasets": {
+                "kev": {"path": kev.dest, "fetched_at": "2026-01-01T00:00:00Z"},
+                "nuclei": {"path": nuclei.dest}}})
+            datasets.pack(out)
+
+        class Quiet(http.server.SimpleHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+        handler = functools.partial(Quiet, directory=str(out))
+        try:
+            srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        except PermissionError:
+            self.skipTest("local port binding blocked (sandbox)")
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        env = {"CROWBAR_MIRROR": f"http://127.0.0.1:{srv.server_port}/"}
+        try:
+            with home(dst), mock.patch.dict(os.environ, env):
+                res = {r["name"]: r for r in datasets.sync([kev, nuclei])}
+                self.assertEqual({r["status"] for r in res.values()}, {"ok"})
+                self.assertEqual(kev.path.read_text(), '{"vulnerabilities": []}')
+                self.assertEqual((nuclei.path / "http" / "t.yaml").read_text(), "id: t\n")
+                self.assertFalse((nuclei.path / ".git").exists())
+                self.assertEqual(datasets.load_manifest()["datasets"]["kev"]["fetched_at"],
+                                 "2026-01-01T00:00:00Z")
+                # unchanged mirror: nothing re-downloaded
+                self.assertEqual({r["status"] for r in datasets.sync([kev, nuclei])}, {"same"})
+                # tampered file: fails instead of landing
+                (out / "kev").write_text("evil")
+                r = datasets.sync([kev], force=True)[0]
+                self.assertEqual(r["status"], "FAIL")
+                self.assertIn("sha256", r["error"])
+                self.assertEqual(kev.path.read_text(), '{"vulnerabilities": []}')
+                # a dataset the mirror lacks goes upstream (stubbed here)
+                epss = datasets.plan(only=["epss"])[0]
+                with mock.patch.object(datasets, "http_get", return_value=None) as up:
+                    epss.path.parent.mkdir(parents=True)
+                    epss.path.write_text("x")
+                    datasets.sync([epss])
+                up.assert_called_once()
+                self.assertEqual(up.call_args[0][0], epss.url)
+        finally:
+            srv.shutdown()
+            srv.server_close()
+
+
 class TestInstalledRoot(unittest.TestCase):
     def test_installed_root(self):
         # an installed package (no bin/crowbar beside it) must not index into site-packages
