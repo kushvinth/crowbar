@@ -30,7 +30,7 @@ DOCS = ["README.md", "AGENTS.md", "docs/DATASETS.md", "docs/MAP.md"]
 COMMANDS = ["search", "cve", "product", "kev", "exploit", "nuclei", "msf",
             "models", "attack", "cwe", "capec", "os", "advisory", "code",
             "bin", "debian", "poc", "sources", "map", "stats", "where", "sql",
-            "doctor", "sync", "build", "update", "verify", "link", "unlink"]
+            "doctor", "sync", "pack", "build", "update", "verify", "link", "unlink"]
 errors: list[str] = []
 
 

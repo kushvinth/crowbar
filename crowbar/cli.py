@@ -656,6 +656,16 @@ def cmd_sync(args) -> None:
         die(", ".join(r["name"] for r in bad))
 
 
+def cmd_pack(args) -> None:
+    out = pathlib.Path(args.dir).expanduser()
+    doc = datasets.pack(out)
+    if not doc["datasets"]:
+        die("nothing synced to pack - run: crowbar sync")
+    total = sum(e["bytes"] for e in doc["datasets"].values())
+    print(f"packed {len(doc['datasets'])} datasets ({datasets.human(total)}) -> {out}\n"
+          f"upload every file in it, then point users at it: CROWBAR_MIRROR=<url of that folder>")
+
+
 def cmd_build(args) -> None:
     from . import indexer
     if not paths.DATA.exists() or not any(paths.DATA.iterdir()):
@@ -1395,6 +1405,9 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--force", action="store_true")
     s.add_argument("--pull", action="store_true", help="git pull existing clones")
     s.add_argument("--jobs", type=int, default=4)
+
+    s = add("pack", cmd_pack, "package synced datasets as a mirror for CROWBAR_MIRROR")
+    s.add_argument("dir")
 
     s = add("build", cmd_build, "build the index from downloaded data")
     s.add_argument("--tier", choices=datasets.TIER_NAMES, help="record the size tier this index was built for")

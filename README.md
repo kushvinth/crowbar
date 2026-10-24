@@ -125,7 +125,9 @@ crowbar build --tier lite   # build the local index
 crowbar doctor              # verify it's ready
 ```
 
-With `uvx`, prefix each: `uvx crowbar-cli sync --tier lite`. Refresh later with
+With `uvx`, prefix each: `uvx crowbar-cli sync --tier lite`. To pull a
+prebuilt mirror instead of the upstream feeds, set `CROWBAR_MIRROR` - see
+[docs/DATASETS.md](docs/DATASETS.md#mirror-crowbar-pack-crowbar_mirror). Refresh later with
 `crowbar update` (~10 s) - NVD modified + KEV + EPSS + Exploit-DB, in place.
 
 **Size tiers** - each a superset of the one above, so you pick your disk budget:

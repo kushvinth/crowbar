@@ -366,6 +366,7 @@ crowbar build                # full rebuild, atomic swap (heavy with bulk data)
 crowbar update               # in-place incremental (~10 s)
 crowbar update --deep        # + Nuclei / MSF / ATT&CK / vendor + toolkit tables
 crowbar verify               # SQLite integrity + sha256 of every dataset
+crowbar pack <dir>           # package synced data as a mirror (CROWBAR_MIRROR=<url>)
 crowbar stats                # coverage + freshness
 python3 scripts/selftest.py    # corpus health checks
 python3 scripts/check.py       # schema/catalog/docs/style consistency
