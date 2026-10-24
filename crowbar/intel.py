@@ -462,6 +462,8 @@ def load_poc_github(path: pathlib.Path, con: sqlite3.Connection, progress=None) 
         "INSERT INTO poc_orphan(cve_id,count) SELECT p.cve_id,count(*) FROM poc p "
         "WHERE NOT EXISTS(SELECT 1 FROM cve c WHERE c.id=p.cve_id) GROUP BY p.cve_id")
     con.execute("UPDATE cve_meta SET has_poc=0, poc_count=0")
+    # Index before the correlated count below; without it each cve_meta row scans all of poc.
+    con.execute("CREATE INDEX IF NOT EXISTS poc_cve ON poc(cve_id)")
     con.execute(
         "UPDATE cve_meta SET has_poc=1, poc_count="
         "(SELECT count(*) FROM poc WHERE poc.cve_id=cve_meta.cve_id) "
