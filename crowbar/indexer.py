@@ -200,7 +200,7 @@ CREATE INDEX cve_cna_assigner ON cve_cna(assigner);
 CREATE INDEX cve_meta_pubyear ON cve_meta(published_year);
 CREATE INDEX cve_meta_cveyear ON cve_meta(cve_year);
 CREATE INDEX cve_meta_poc ON cve_meta(has_poc);
-CREATE INDEX poc_cve ON poc(cve_id);
+CREATE INDEX IF NOT EXISTS poc_cve ON poc(cve_id);
 CREATE INDEX poc_stars ON poc(stars);
 CREATE INDEX poc_orphan_id ON poc_orphan(cve_id);
 CREATE INDEX cve_alias_alias ON cve_alias(alias);
