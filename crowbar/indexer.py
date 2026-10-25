@@ -191,7 +191,7 @@ CREATE INDEX adv_cve ON advisory(cve);
 CREATE INDEX adv_pkg ON advisory(package);
 CREATE INDEX adv_eco ON advisory(ecosystem);
 CREATE INDEX pkg_pkg ON package_range(package);
-CREATE INDEX pkg_adv ON package_range(advisory_id);
+CREATE INDEX IF NOT EXISTS pkg_adv ON package_range(advisory_id);
 CREATE INDEX debian_pkg ON debian(package);
 CREATE INDEX debian_cve ON debian(cve);
 CREATE INDEX os_cve ON os_advisory(cve);
