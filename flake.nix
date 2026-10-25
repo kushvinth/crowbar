@@ -18,7 +18,7 @@
         pkgs = import nixpkgs { inherit system; };
         crowbar = pkgs.python3Packages.buildPythonApplication {
           pname = "crowbar-cli";
-          version = "0.1.3"; # x-release-please-version
+          version = "0.1.4"; # x-release-please-version
           src = ./.;
           pyproject = true;
           build-system = [ pkgs.python3Packages.hatchling ];
