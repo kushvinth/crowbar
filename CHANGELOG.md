@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.1.4](https://github.com/kushvinth/crowbar/compare/v0.1.3...v0.1.4) (2026-10-25)
+
+
+### Features
+
+* **sync:** pull datasets from a packaged mirror instead of upstream ([#7](https://github.com/kushvinth/crowbar/issues/7)) ([723decd](https://github.com/kushvinth/crowbar/commit/723decd6ac771604fa9ffd3233375ee8173e8ae5))
+
+
+### Performance Improvements
+
+* **build:** index package_range.advisory_id before per-advisory deletes ([#11](https://github.com/kushvinth/crowbar/issues/11)) ([24defa0](https://github.com/kushvinth/crowbar/commit/24defa0502c6c15425ff8114c03ab3c364c0d907))
+* **build:** index poc.cve_id before counting PoCs per CVE ([#8](https://github.com/kushvinth/crowbar/issues/8)) ([46216ea](https://github.com/kushvinth/crowbar/commit/46216ea5cc317705c56b083198682dce2db9fdc8))
+
 ## [0.1.3](https://github.com/kushvinth/crowbar/compare/v0.1.2...v0.1.3) (2026-10-22)
 
 
