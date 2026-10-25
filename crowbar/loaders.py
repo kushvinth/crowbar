@@ -102,6 +102,8 @@ def load_osv_zip(path: pathlib.Path, con: sqlite3.Connection) -> int:
         [(r[0], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9], r[10], r[11]) for r in rows])
     # Reloading a zip re-REPLACEs advisory rows; clear their old ranges too so
     # package_range stays in sync instead of accumulating duplicate rows.
+    # Index before the per-advisory DELETE below; without it each one scans all of package_range.
+    con.execute("CREATE INDEX IF NOT EXISTS pkg_adv ON package_range(advisory_id)")
     con.executemany("DELETE FROM package_range WHERE advisory_id=?",
                     [(r[0],) for r in rows])
     con.executemany(
