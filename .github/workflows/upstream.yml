@@ -47,6 +47,10 @@ jobs:
           ./bin/crowbar sql "select count(*) n, count(epss) e from kev" --json | jq -e '.[0].n > 1000 and .[0].n == .[0].e'
           ./bin/crowbar cve CVE-2021-44228 2>&1 | grep -q "CISA KEV"
           ./bin/crowbar sql "select count(*) n from cve" --json | jq -e '.[0].n > 20000'
+          # chatter feeds parse (an upstream format change empties this) and bench runs
+          ./bin/crowbar trending --days 90 --json | jq -e 'length > 0'
+          ./bin/crowbar new --json | jq -e '.published.total > 0'
+          ./bin/crowbar bench --runs 1 --json | jq -e '[.results[] | select(.median_ms != null)] | length >= 5'
 
       - name: Aged index refreshes itself in the background
         run: |

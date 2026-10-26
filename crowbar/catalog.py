@@ -5,7 +5,7 @@ dataset or table is added; `crowbar map` renders it together with live status.
 """
 from __future__ import annotations
 
-from . import paths
+from . import chatter, paths
 
 # dataset group -> (on-disk path, tables it populates, example command)
 GROUPS: dict[str, dict] = {
@@ -24,6 +24,11 @@ GROUPS: dict[str, dict] = {
         "path": "data/intel/poc-in-github/PoC-in-GitHub-master.tar.gz",
         "tables": ["poc", "poc_orphan", "cve_meta"],
         "commands": ["crowbar poc", "crowbar search --poc"],
+    },
+    "chatter": {
+        "path": "data/chatter/*.jsonl",
+        "tables": ["mention"],
+        "commands": ["crowbar trending", "crowbar new", "crowbar cve"],
     },
     "kev": {
         "path": "data/kev/known_exploited_vulnerabilities.json",
@@ -105,6 +110,7 @@ TABLES: dict[str, str] = {
     "cve_cna_product": "CNA affected vendor/product pairs",
     "cve_meta": "publication year vs CVE-ID year, and public-PoC counts",
     "poc": "public GitHub PoC repositories (metadata only, never executed)",
+    "mention": "posts naming a CVE: HN, oss-security, Full Disclosure, ZDI, Mastodon, EUVD exploited",
     "poc_orphan": "PoC CVEs that are absent from the local CVE index",
     "cve_alias": "CVE -> GHSA/OSV alias mapping",
     "source_state": "source URL/license/SHA-256, load time, record count, status",
@@ -151,6 +157,8 @@ def group_of(dataset_name: str) -> str:
         return "debian"
     if dataset_name in ("msrc", "apple"):
         return "vendor"
+    if dataset_name in chatter.SOURCES:
+        return "chatter"
     return dataset_name
 
 

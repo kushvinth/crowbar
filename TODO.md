@@ -28,6 +28,39 @@ Downloaded raw intel: `docs/INTEL.md`.
 - [x] **`cve.year` split.** `cve_meta.published_year` vs `cve_meta.cve_year`
       (84,672 rows differ).
 
+## Done (2026-10-26)
+
+- [x] **Freshness pipeline.** A failed `nvd-modified` download no longer stamps the
+      index fresh (offline laptops used to hide the 8-day gap forever); failures are
+      recorded in `index/update.err` → `index.last_error` (doctor, stats, cb_stats).
+      Stale indexes without a tier now catch up too. The MCP server re-checks every
+      10 min and appends a note to tool results while stale.
+- [x] **Plain `update` wiped Nuclei/Metasploit links** for every re-sent CVE; EPSS
+      only refreshed for modified CVEs. Both fixed (`apply_epss`).
+- [x] **CVE chatter** (`mention`, `crowbar trending`, `cb_trending`): HN, oss-security,
+      Full Disclosure, ZDI, Mastodon, ENISA EUVD exploited. Optional datasets.
+- [x] **Indexes:** one `IF NOT EXISTS` list applied by build *and* update, 12
+      redundant indexes retired, composite `cve(kev,epss)`, `advisory(package,ecosystem)`,
+      `os_advisory(platform,released)`, date indexes; `ANALYZE` + FTS optimize.
+- [x] **Speed:** quadratic PoC meta update and OSV range delete during build; CoW
+      clone + fast PRAGMAs for update; `products()` exact/prefix index lookups (no
+      20k cap); `--product/--vendor` filters use indexes; stats reuse `stats.json`;
+      CLI import 88 → 42 ms; one DB open per command. `crowbar bench`.
+
+## Audit follow-ups not done yet
+
+- [ ] `cve_fts` delete filters an UNINDEXED column (full scan per 800 ids): give
+      FTS rows a fixed rowid and delete by rowid (needs a rebuild).
+- [ ] `update` still writes a full DB copy on non-CoW filesystems (exFAT USB):
+      update in place inside one transaction instead.
+- [ ] CVE List + PoC tarballs reload on every update (minutes): delta releases, or
+      move them to `--deep`.
+- [ ] MCP: keep one read-only connection, reopen on inode change; mmap/cache PRAGMAs.
+- [ ] FTS relevance: top-N inside FTS before the join when no filters are set.
+- [ ] `exploit <id>` downloads by default: offline lookup + `--fetch`.
+- [ ] `doctor --json`; `query` positional optional for nuclei/msf/attack/... ;
+      dedupe `_norm`/`CVE_RE` copies; `summarize()` → `db.counts()`.
+
 ## P0 - correctness and integrity
 
 - [ ] **Apple `exploited` parsing.** Apple has 8,139 rows but 0 `exploited`;
@@ -191,7 +224,7 @@ High-value for real intrusions; none indexed today:
 - [ ] `crowbar exploit --language`, `--type`, `--verified-only`, `--no-cve`.
 - [ ] `crowbar scan <lockfile|sbom>` - OSV range matching for npm/PyPI/Go/Maven.
 - [ ] `crowbar export --format jsonl|csv --query …` for pipelines.
-- [ ] `crowbar diff --since <date>` / `crowbar new` - what changed since a timestamp.
+- [x] `crowbar new` / `cb_new` - what changed since a date (KEV/EUVD exploited, CVEs, PoCs).
 - [ ] `crowbar watchlist add/remove/check` - persistent CVE/product watchlist.
 - [ ] `crowbar map --json|--mermaid` (already has `--tables`); expose dataset
       freshness + row counts in `crowbar map`.

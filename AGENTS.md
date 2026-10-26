@@ -51,6 +51,10 @@ Freshness: the CLI and the MCP server start a background `crowbar update` once
 the index is a day old (at most hourly; `CROWBAR_NO_AUTO_UPDATE=1` turns it off,
 log in `index/update.log`). `cb_stats` → `index.age_days` / `index.stale`; stale
 means older than NVD's 8-day change window, so say recent CVEs may be missing.
+`index.last_error` says why the last refresh failed; a failed NVD download leaves
+the age untouched. `cb_stats` → `data_as_of` gives the newest CVE/KEV/PoC/mention
+timestamps. The MCP server re-checks every 10 minutes and appends a note to tool
+results while the index is stale.
 An installed package keeps its index in `~/.crowbar` (`CROWBAR_HOME` overrides).
 
 ---
@@ -65,6 +69,7 @@ crowbar/
 │   ├── paths.py            root resolution, YEARS, SCHEMA_VERSION
 │   ├── datasets.py         registry + downloader + manifest/freshness
 │   ├── indexer.py          schema, NVD/KEV/intel loaders, build(), update()
+│   ├── chatter.py          CVE mentions: HN, mailing lists, ZDI, Mastodon, EUVD
 │   ├── loaders.py          bulk loaders: OSV, Debian, MSRC, Apple, toolkit,
 │   │                       Exploit-DB source code, Metasploit sources
 │   ├── catalog.py          static dataset -> table -> command map (crowbar map)
@@ -76,7 +81,7 @@ crowbar/
 │   ├── check.py            static checks (schema/catalog/docs/style)
 │   └── make_fixture.py     tiny synthetic index for CI
 ├── tests/
-│   ├── test_unit.py        111 fixture tests (CI, no corpus needed)
+│   ├── test_unit.py        131 fixture tests (CI, no corpus needed)
 │   └── test_corpus.py      generated tests against index/crowbar.db
 ├── docs/
 │   ├── DATASETS.md         per-source license, shape, caveats
@@ -112,6 +117,7 @@ data/msrc/         Microsoft Security Update Guide (sug.json)
 data/apple/        security release index + advisory pages
 data/toolkit/      gtfobins, lolbas, payloads
 data/models/       models.dev catalog
+data/chatter/      append-only JSONL archives of posts naming a CVE
 ```
 
 ---
@@ -148,6 +154,8 @@ capec(id PK, name, severity, likelihood, cwe, description)
 model(provider, provider_name, id, name, context, output_limit,
       input_cost, output_cost, released, reasoning, tool_call, vision)
 ssvc(cve_id PK, exploitation, automatable, technical_impact, timestamp, source)
+mention(source, cve_id, url, title, posted_at, score)  -- hn, oss-security,
+        -- fulldisclosure, zdi, mastodon, euvd-exploited; titles/links only
 
 -- bulk / ecosystem / vendor
 advisory(source, id, ecosystem, package, cve, summary, severity,
@@ -213,6 +221,9 @@ or executed.
 | technique for an actor/behavior | `crowbar attack <q>` | CWE |
 | weakness class | `crowbar cwe <n>` / `crowbar capec <q>` | CVE |
 | model pricing/context | `crowbar models` | - |
+| what's being discussed / exploited now | `crowbar trending` (`cb_trending`) | search |
+| what changed since a date | `crowbar new --since D` (`cb_new`) | `--since` on search |
+| how fast is this index | `crowbar bench` | - |
 
 ---
 
@@ -370,7 +381,7 @@ crowbar pack <dir>           # package synced data as a mirror (CROWBAR_MIRROR=<
 crowbar stats                # coverage + freshness
 python3 scripts/selftest.py    # corpus health checks
 python3 scripts/check.py       # schema/catalog/docs/style consistency
-python3 -m tests.test_unit     # 111 fixture tests (also runs in CI)
+python3 -m tests.test_unit     # 131 fixture tests (also runs in CI)
 python3 -m tests.test_corpus   # generated corpus tests
 pre-commit run --all-files     # check + unit + corpus + gitleaks
 ```

@@ -128,9 +128,7 @@ CREATE INDEX IF NOT EXISTS cve_meta_cveyear ON cve_meta(cve_year);
 CREATE INDEX IF NOT EXISTS cve_meta_poc ON cve_meta(has_poc);
 CREATE INDEX IF NOT EXISTS poc_cve ON poc(cve_id);
 CREATE INDEX IF NOT EXISTS poc_stars ON poc(stars);
-CREATE INDEX IF NOT EXISTS poc_orphan_id ON poc_orphan(cve_id);
 CREATE INDEX IF NOT EXISTS cve_alias_alias ON cve_alias(alias);
-CREATE INDEX IF NOT EXISTS source_state_status ON source_state(status);
 """
 
 
@@ -462,12 +460,10 @@ def load_poc_github(path: pathlib.Path, con: sqlite3.Connection, progress=None) 
         "INSERT INTO poc_orphan(cve_id,count) SELECT p.cve_id,count(*) FROM poc p "
         "WHERE NOT EXISTS(SELECT 1 FROM cve c WHERE c.id=p.cve_id) GROUP BY p.cve_id")
     con.execute("UPDATE cve_meta SET has_poc=0, poc_count=0")
-    # Index before the correlated count below; without it each cve_meta row scans all of poc.
-    con.execute("CREATE INDEX IF NOT EXISTS poc_cve ON poc(cve_id)")
+    # one grouped pass; a correlated count per row is quadratic before poc_cve exists
     con.execute(
-        "UPDATE cve_meta SET has_poc=1, poc_count="
-        "(SELECT count(*) FROM poc WHERE poc.cve_id=cve_meta.cve_id) "
-        "WHERE EXISTS(SELECT 1 FROM poc WHERE poc.cve_id=cve_meta.cve_id)")
+        "UPDATE cve_meta SET has_poc=1, poc_count=p.n FROM "
+        "(SELECT cve_id, count(*) n FROM poc GROUP BY cve_id) p WHERE p.cve_id=cve_meta.cve_id")
     record_source(con, "poc-in-github", path=path, url=src["url"],
                   license=src["license"], sha256=src["sha256"], fetched_at=fetched,
                   count=added,
