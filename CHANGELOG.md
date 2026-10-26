@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.5](https://github.com/kushvinth/crowbar/compare/v0.1.4...v0.1.5) (2026-10-26)
+
+
+### Features
+
+* self-healing updates, CVE chatter (trending/new), faster index ([#13](https://github.com/kushvinth/crowbar/issues/13)) ([4e0cf71](https://github.com/kushvinth/crowbar/commit/4e0cf71c7b638d18c9b477bb6f2e6a18629283de))
+
 ## [0.1.4](https://github.com/kushvinth/crowbar/compare/v0.1.3...v0.1.4) (2026-10-25)
 
 

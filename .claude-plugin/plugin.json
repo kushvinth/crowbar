@@ -1,6 +1,6 @@
 {
   "name": "crowbar",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Retrieve CVEs and index them inside your codebase: a local SQLite index of CVEs, exploits and advisories that any tool in your repo can query.",
   "author": {
     "name": "kushvinth",
