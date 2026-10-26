@@ -23,14 +23,15 @@ sys.dont_write_bytecode = True
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from crowbar import catalog, datasets, indexer  # noqa: E402
+from crowbar import catalog, chatter, datasets, indexer  # noqa: E402
 
 SOURCE_DIRS = ["crowbar", "tests", "scripts", "mcp", "bin"]
 DOCS = ["README.md", "AGENTS.md", "docs/DATASETS.md", "docs/MAP.md"]
 COMMANDS = ["search", "cve", "product", "kev", "exploit", "nuclei", "msf",
             "models", "attack", "cwe", "capec", "os", "advisory", "code",
             "bin", "debian", "poc", "sources", "map", "stats", "where", "sql",
-            "doctor", "sync", "pack", "build", "update", "verify", "link", "unlink"]
+            "doctor", "sync", "pack", "build", "update", "verify", "link", "unlink",
+            "trending", "new", "bench"]
 errors: list[str] = []
 
 
@@ -48,7 +49,7 @@ def check_compile() -> None:
 
 
 def check_catalog() -> None:
-    schema = indexer.SCHEMA
+    schema = indexer.SCHEMA + chatter.SCHEMA
     tables = set(re.findall(r"CREATE (?:VIRTUAL )?TABLE (?:IF NOT EXISTS )?(\w+)", schema))
     for name in catalog.TABLES:
         if name not in tables:

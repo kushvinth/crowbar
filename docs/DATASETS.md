@@ -38,6 +38,22 @@ Redistributing a source must be allowed by its license (see the tables below).
 | CAPEC | capec.mitre.org | `data/capec/capec_latest.xml` | XML | quarterly |
 | LLM catalog | models.dev | `data/models/models.dev.json` | providers → models | daily |
 
+## CVE chatter (core, `mention` table)
+
+Each source is merged into an append-only JSONL archive in `data/chatter/` (feeds
+show only their latest items, so history lives on disk). Only the link, title
+(Mastodon: the first 200 characters of the post text), date, score and the CVE IDs
+named are kept. Posts naming no CVE are dropped.
+
+| dataset | source | file | notes |
+|---|---|---|---|
+| `hn` | Hacker News via hn.algolia.com | `data/chatter/hn.jsonl` | stories naming `CVE-<this or last year>`; score = points |
+| `oss-security` | seclists.org RSS | `data/chatter/oss-security.jsonl` | latest ~15 posts per fetch |
+| `fulldisclosure` | seclists.org RSS | `data/chatter/fulldisclosure.jsonl` | latest ~15 posts per fetch |
+| `zdi` | zerodayinitiative.com RSS (Trend Micro) | `data/chatter/zdi.jsonl` | published advisories |
+| `mastodon` | mastodon.social `#cve` tag | `data/chatter/mastodon.jsonl` | bot accounts skipped; score = favourites + boosts |
+| `euvd-exploited` | ENISA EUVD API | `data/chatter/euvd-exploited.jsonl` | EU exploited list; date = exploited since |
+
 ## Extra (`crowbar sync --extra`, `crowbar build --extra`)
 
 | dataset | source | file | shape | value |

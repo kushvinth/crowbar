@@ -16,7 +16,8 @@ say so.**
 
 1. **MCP tools** (if connected): `cb_search`, `cb_cve`, `cb_product`, `cb_kev`,
    `cb_exploit`, `cb_nuclei`, `cb_msf`, `cb_os`, `cb_advisory`, `cb_poc`,
-   `cb_code`, `cb_attack`, `cb_cwe`, `cb_sql`, `cb_stats` (20 tools).
+   `cb_code`, `cb_attack`, `cb_cwe`, `cb_sql`, `cb_stats`, `cb_trending`,
+   `cb_new` (22 tools).
 2. **CLI**: `crowbar <cmd> --json` (installed via `uvx crowbar-cli` / `pip install
    crowbar-cli`), or `.crowbar/bin/crowbar` in a linked project.
 3. **SQL**: read-only on `index/crowbar.db`. Schema in `AGENTS.md`.
@@ -43,7 +44,12 @@ a later, optional upgrade.
 itself in the background once it is a day old, so normally there is nothing to
 do. If `index.stale` is true (older than NVD's 8-day change window), tell the
 user recent CVEs may be missing or outdated, and run `uvx crowbar-cli update`
-before answering anything about CVEs from the last few weeks.
+before answering anything about CVEs from the last few weeks. `index.last_error`
+says why the last background refresh failed (e.g. offline); pass it on.
+
+For "what's hot" or "what changed" questions use `cb_trending` (CVEs named on
+HN, oss-security, Full Disclosure, ZDI, Mastodon, ENISA exploited) and `cb_new`
+(KEV/EUVD additions, new CVEs, new PoCs since a date).
 
 ## Workflow
 

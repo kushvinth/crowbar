@@ -4,15 +4,18 @@ from __future__ import annotations
 import csv
 import gzip
 import json
+import os
 import pathlib
 import re
 import shutil
 import sqlite3
+import subprocess
+import sys
 import time
 import xml.etree.ElementTree as ET
 import zipfile
 
-from . import intel, loaders, paths
+from . import chatter, db, intel, loaders, paths
 
 CVE_RE = re.compile(r"CVE-\d{4}-\d{4,7}", re.I)
 
@@ -160,51 +163,65 @@ CREATE VIRTUAL TABLE model_fts USING fts5(
 );
 """
 
-INDEXES = """
-CREATE INDEX cve_year ON cve(year);
-CREATE INDEX cve_sev ON cve(severity);
-CREATE INDEX cve_cvss ON cve(cvss);
-CREATE INDEX cve_kev ON cve(kev);
-CREATE INDEX cve_epss ON cve(epss);
-CREATE INDEX cve_exploit_flag ON cve(has_exploit);
-CREATE INDEX cve_nuclei_flag ON cve(has_nuclei);
-CREATE INDEX cve_msf_flag ON cve(has_msf);
-CREATE INDEX cve_cwe_cwe ON cve_cwe(cwe);
-CREATE INDEX cve_cwe_id ON cve_cwe(cve_id);
-CREATE INDEX prod_product ON cve_product(product);
-CREATE INDEX prod_vendor ON cve_product(vendor);
-CREATE INDEX prod_id ON cve_product(cve_id);
-CREATE INDEX cpe_product ON cpe_match(product);
-CREATE INDEX cpe_vendor ON cpe_match(vendor);
-CREATE INDEX cpe_id ON cpe_match(cve_id);
-CREATE INDEX ref_id ON cve_ref(cve_id);
-CREATE INDEX exp_date ON exploit(date);
-CREATE INDEX exp_platform ON exploit(platform);
-CREATE INDEX nuc_cve ON nuclei(cve);
-CREATE INDEX nuc_sev ON nuclei(severity);
-CREATE INDEX nuc_domain ON nuclei(domain);
-CREATE INDEX kev_date ON kev(date_added);
-CREATE INDEX cve_nuclei_id ON cve_nuclei(cve_id);
-CREATE INDEX cve_msf_id ON cve_msf(cve_id);
-CREATE INDEX ssvc_expl ON ssvc(exploitation);
-CREATE INDEX adv_cve ON advisory(cve);
-CREATE INDEX adv_pkg ON advisory(package);
-CREATE INDEX adv_eco ON advisory(ecosystem);
-CREATE INDEX pkg_pkg ON package_range(package);
+# Loaders look these up while they insert, so they exist from create() on.
+LOOKUP_INDEXES = """
 CREATE INDEX IF NOT EXISTS pkg_adv ON package_range(advisory_id);
-CREATE INDEX debian_pkg ON debian(package);
-CREATE INDEX debian_cve ON debian(cve);
-CREATE INDEX os_cve ON os_advisory(cve);
-CREATE INDEX os_plat ON os_advisory(platform);
-CREATE INDEX cve_cna_assigner ON cve_cna(assigner);
-CREATE INDEX cve_meta_pubyear ON cve_meta(published_year);
-CREATE INDEX cve_meta_cveyear ON cve_meta(cve_year);
-CREATE INDEX cve_meta_poc ON cve_meta(has_poc);
 CREATE INDEX IF NOT EXISTS poc_cve ON poc(cve_id);
-CREATE INDEX poc_stars ON poc(stars);
-CREATE INDEX poc_orphan_id ON poc_orphan(cve_id);
-CREATE INDEX cve_alias_alias ON cve_alias(alias);
-CREATE INDEX source_state_status ON source_state(status);
+"""
+
+# Query indexes, built after the bulk load. IF NOT EXISTS + RETIRED so update()
+# brings indexes built by older versions up to date without a rebuild.
+INDEXES = """
+CREATE INDEX IF NOT EXISTS cve_published ON cve(published);
+CREATE INDEX IF NOT EXISTS cve_modified ON cve(modified);
+CREATE INDEX IF NOT EXISTS poc_created ON poc(created_at);
+CREATE INDEX IF NOT EXISTS cve_kev_epss ON cve(kev, epss);
+CREATE INDEX IF NOT EXISTS adv_pkg_eco ON advisory(package, ecosystem);
+CREATE INDEX IF NOT EXISTS os_plat_rel ON os_advisory(platform, released);
+CREATE INDEX IF NOT EXISTS os_released ON os_advisory(released);
+CREATE INDEX IF NOT EXISTS cve_year ON cve(year);
+CREATE INDEX IF NOT EXISTS cve_sev ON cve(severity);
+CREATE INDEX IF NOT EXISTS cve_cvss ON cve(cvss);
+CREATE INDEX IF NOT EXISTS cve_epss ON cve(epss);
+CREATE INDEX IF NOT EXISTS cve_exploit_flag ON cve(has_exploit);
+CREATE INDEX IF NOT EXISTS cve_nuclei_flag ON cve(has_nuclei);
+CREATE INDEX IF NOT EXISTS cve_msf_flag ON cve(has_msf);
+CREATE INDEX IF NOT EXISTS cve_cwe_cwe ON cve_cwe(cwe);
+CREATE INDEX IF NOT EXISTS prod_product ON cve_product(product);
+CREATE INDEX IF NOT EXISTS prod_vendor ON cve_product(vendor);
+CREATE INDEX IF NOT EXISTS cpe_product ON cpe_match(product);
+CREATE INDEX IF NOT EXISTS cpe_vendor ON cpe_match(vendor);
+CREATE INDEX IF NOT EXISTS exp_date ON exploit(date);
+CREATE INDEX IF NOT EXISTS exp_platform ON exploit(platform);
+CREATE INDEX IF NOT EXISTS nuc_cve ON nuclei(cve);
+CREATE INDEX IF NOT EXISTS nuc_sev ON nuclei(severity);
+CREATE INDEX IF NOT EXISTS nuc_domain ON nuclei(domain);
+CREATE INDEX IF NOT EXISTS kev_date ON kev(date_added);
+CREATE INDEX IF NOT EXISTS ssvc_expl ON ssvc(exploitation);
+CREATE INDEX IF NOT EXISTS adv_cve ON advisory(cve);
+CREATE INDEX IF NOT EXISTS adv_eco ON advisory(ecosystem);
+CREATE INDEX IF NOT EXISTS pkg_pkg ON package_range(package);
+CREATE INDEX IF NOT EXISTS debian_pkg ON debian(package);
+CREATE INDEX IF NOT EXISTS debian_cve ON debian(cve);
+CREATE INDEX IF NOT EXISTS os_cve ON os_advisory(cve);
+CREATE INDEX IF NOT EXISTS cve_cna_assigner ON cve_cna(assigner);
+CREATE INDEX IF NOT EXISTS cve_meta_pubyear ON cve_meta(published_year);
+CREATE INDEX IF NOT EXISTS cve_meta_cveyear ON cve_meta(cve_year);
+CREATE INDEX IF NOT EXISTS cve_meta_poc ON cve_meta(has_poc);
+CREATE INDEX IF NOT EXISTS poc_stars ON poc(stars);
+CREATE INDEX IF NOT EXISTS cve_alias_alias ON cve_alias(alias);
+DROP INDEX IF EXISTS adv_pkg;
+DROP INDEX IF EXISTS cpe_id;
+DROP INDEX IF EXISTS cve_cwe_id;
+DROP INDEX IF EXISTS cve_kev;
+DROP INDEX IF EXISTS cve_msf_id;
+DROP INDEX IF EXISTS cve_nuclei_id;
+DROP INDEX IF EXISTS kev_date_added;
+DROP INDEX IF EXISTS os_plat;
+DROP INDEX IF EXISTS poc_orphan_id;
+DROP INDEX IF EXISTS prod_id;
+DROP INDEX IF EXISTS ref_id;
+DROP INDEX IF EXISTS source_state_status;
 """
 
 BATCH = 800
@@ -314,8 +331,8 @@ def delete_cves(con: sqlite3.Connection, ids: list[str]) -> None:
     for i in range(0, len(ids), BATCH):
         chunk = ids[i:i + BATCH]
         q = ",".join("?" * len(chunk))
-        for table in ("cve_cwe", "cve_product", "cpe_match", "cve_ref",
-                      "cve_exploit", "cve_nuclei", "cve_msf", "cve_fts", "cve"):
+        # cve_exploit/cve_nuclei/cve_msf come from other sources; an NVD re-load keeps them
+        for table in ("cve_cwe", "cve_product", "cpe_match", "cve_ref", "cve_fts", "cve"):
             con.execute(f"DELETE FROM {table} WHERE {'id' if table == 'cve' else 'cve_id' if table != 'cve_fts' else 'id'} IN ({q})", chunk)
 
 
@@ -413,20 +430,17 @@ def read_epss(path: pathlib.Path) -> dict[str, tuple[float, float]]:
     return out
 
 
-def load_epss(path: pathlib.Path, con: sqlite3.Connection) -> int:
-    rows = read_epss(path)
-    if not rows:
+def apply_epss(con: sqlite3.Connection, epss: dict) -> int:
+    """Today's EPSS onto every CVE, not only the ones NVD re-sent."""
+    if not epss:
         return 0
     con.execute("CREATE TEMP TABLE IF NOT EXISTS _epss_tmp(cve TEXT PRIMARY KEY, epss REAL, pct REAL)")
     con.execute("DELETE FROM _epss_tmp")
     con.executemany("INSERT OR REPLACE INTO _epss_tmp VALUES (?,?,?)",
-                    [(k, v[0], v[1]) for k, v in rows.items()])
-    con.execute("UPDATE cve AS c SET epss=(SELECT epss FROM _epss_tmp WHERE cve=c.id),"
-                " epss_pct=(SELECT pct FROM _epss_tmp WHERE cve=c.id)"
-                " WHERE id IN (SELECT cve FROM _epss_tmp)")
+                    [(k, v[0], v[1]) for k, v in epss.items()])
+    con.execute("UPDATE cve SET epss=t.epss, epss_pct=t.pct FROM _epss_tmp t WHERE t.cve=cve.id")
     con.execute("DROP TABLE _epss_tmp")
-    con.commit()
-    return len(rows)
+    return len(epss)
 
 
 def load_exploitdb(path: pathlib.Path, con: sqlite3.Connection) -> int:
@@ -751,9 +765,40 @@ def load_ssvc(root: pathlib.Path, con: sqlite3.Connection) -> int:
 # ---------------------------------------------------------------- build/update
 def create(path: pathlib.Path) -> sqlite3.Connection:
     con = sqlite3.connect(path)
-    con.executescript("PRAGMA journal_mode=MEMORY; PRAGMA synchronous=OFF; PRAGMA temp_store=MEMORY;")
-    con.executescript(SCHEMA)
+    con.executescript("PRAGMA journal_mode=MEMORY; PRAGMA synchronous=OFF; PRAGMA temp_store=MEMORY;"
+                      "PRAGMA cache_size=-1048576; PRAGMA threads=4;")
+    con.executescript(SCHEMA + chatter.SCHEMA + LOOKUP_INDEXES)
     return con
+
+
+def finish(con: sqlite3.Connection) -> None:
+    """Indexes, planner stats and merged FTS segments: run before every swap."""
+    con.executescript(INDEXES)
+    for fts in ("cve_fts", "exploit_fts", "exploit_code_fts", "nuclei_fts"):
+        con.execute(f"INSERT INTO {fts}({fts}) VALUES('optimize')")
+    con.execute("PRAGMA analysis_limit=1000")
+    con.execute("ANALYZE")
+    con.commit()
+
+
+def _clone(src: pathlib.Path, dst: pathlib.Path) -> None:
+    """Copy-on-write clone (APFS, btrfs, XFS) is instant; plain copy elsewhere (exFAT USB)."""
+    flag = "-c" if sys.platform == "darwin" else "--reflink=auto"
+    try:
+        if subprocess.run(["cp", flag, str(src), str(dst)], capture_output=True).returncode == 0:
+            return
+    except OSError:   # no cp (Windows)
+        pass
+    shutil.copy2(src, dst)
+
+
+def _fsync(path: pathlib.Path) -> None:
+    """synchronous=OFF skipped every flush; make the file durable before it goes live."""
+    fd = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
 
 
 def load_bulk(con: sqlite3.Connection, progress=None, heavy: bool = True) -> dict:
@@ -855,6 +900,8 @@ def build(quick: bool = False, with_extra: bool = False,
     load_cwe(paths.DATA / "cwe/cwec_latest.xml.zip", con)
     load_capec(paths.DATA / "capec/capec_latest.xml", con)
     load_models(paths.DATA / "models/models.dev.json", con)
+    if progress:
+        progress(f"mentions {chatter.load(con)}")
     if with_extra or (paths.DATA / "vulnrichment").exists():
         n = load_ssvc(paths.DATA / "vulnrichment", con)
         if progress:
@@ -866,15 +913,17 @@ def build(quick: bool = False, with_extra: bool = False,
     intel.stub_missing_cwes(con)
     intel.rebuild_aliases(con)
     con.commit()
-    con.executescript(INDEXES)
+    finish(con)
     for k, v in (("schema", str(paths.SCHEMA_VERSION)),
                  ("built_at", time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())),
                  ("updated_at", time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))):
         con.execute("INSERT OR REPLACE INTO meta VALUES (?,?)", (k, v))
     con.commit()
     con.execute("PRAGMA journal_mode=DELETE")
+    con.execute("PRAGMA temp_store=FILE")   # VACUUM's temp copy is DB-sized: keep it off RAM
     con.execute("VACUUM")
     con.close()
+    _fsync(tmp)
     tmp.replace(paths.DB)
 
     stats = summarize()
@@ -896,9 +945,12 @@ def update(deep: bool = False, progress=None) -> dict:
     tmp = paths.DB.with_suffix(".db.tmp")
     if tmp.exists():
         tmp.unlink()
-    shutil.copy2(paths.DB, tmp)
+    _clone(paths.DB, tmp)
     con = sqlite3.connect(tmp, timeout=90)
     con.row_factory = sqlite3.Row
+    # the copy is thrown away on failure, so durability is only needed at the swap
+    con.executescript("PRAGMA synchronous=OFF; PRAGMA journal_mode=MEMORY; PRAGMA temp_store=MEMORY;"
+                      "PRAGMA cache_size=-262144;")
     try:
         try:
             schema = int(con.execute("SELECT value FROM meta WHERE key='schema'").fetchone()[0])
@@ -920,6 +972,10 @@ def update(deep: bool = False, progress=None) -> dict:
             p = paths.DATA / f"nvd/nvdcve-2.0-{feed}.json.gz"
             if p.exists():
                 changed += load_nvd(p, con, epss, kev_ids, replace=True)
+        # INSERT OR REPLACE reset these flags on re-sent CVEs; the link tables still hold them
+        con.execute("UPDATE cve SET has_nuclei=1 WHERE has_nuclei=0 AND id IN (SELECT cve_id FROM cve_nuclei)")
+        con.execute("UPDATE cve SET has_msf=1 WHERE has_msf=0 AND id IN (SELECT cve_id FROM cve_msf)")
+        apply_epss(con, epss)
         if progress:
             progress(f"CVE rows touched {changed}")
 
@@ -937,6 +993,7 @@ def update(deep: bool = False, progress=None) -> dict:
                 load_attack(paths.DATA / f"attack/{f}-attack.json", dom, con)
             load_bulk(con, progress, heavy=False)
         load_models(paths.DATA / "models/models.dev.json", con)
+        chatter.load(con)
         load_cwe(paths.DATA / "cwe/cwec_latest.xml.zip", con)
         load_capec(paths.DATA / "capec/capec_latest.xml", con)
         if (paths.DATA / "vulnrichment").exists():
@@ -945,6 +1002,8 @@ def update(deep: bool = False, progress=None) -> dict:
         intel.rebuild_cve_meta(con)
         intel.stub_missing_cwes(con)
         intel.rebuild_aliases(con)
+        con.executescript(LOOKUP_INDEXES)
+        finish(con)
 
         now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         con.execute("INSERT OR REPLACE INTO meta VALUES ('updated_at', ?)", (now,))
@@ -957,6 +1016,7 @@ def update(deep: bool = False, progress=None) -> dict:
         con.close()
         tmp.unlink(missing_ok=True)
         raise
+    _fsync(tmp)
     tmp.replace(paths.DB)
 
     full = summarize()
@@ -966,12 +1026,11 @@ def update(deep: bool = False, progress=None) -> dict:
 
 
 def _write_stats(stats: dict) -> None:
-    import json as _json
-    (paths.INDEX / "stats.json").write_text(_json.dumps(stats, indent=2, default=str) + "\n")
+    (paths.INDEX / "stats.json").write_text(json.dumps(stats, indent=2, default=str) + "\n")
 
 
 def summarize() -> dict:
-    con = sqlite3.connect(f"file:{paths.DB}?mode=ro", uri=True)
+    con = sqlite3.connect(db.ro_uri(paths.DB), uri=True)
     out = {}
     for (t,) in con.execute("SELECT name FROM sqlite_master WHERE type='table' "
                             "AND name NOT LIKE '%_fts%' AND name NOT LIKE 'sqlite_%'"):

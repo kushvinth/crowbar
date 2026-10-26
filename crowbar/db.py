@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import sqlite3
-from urllib.request import pathname2url
 
 from . import paths
 
@@ -15,14 +14,18 @@ def connect(readonly: bool = True) -> sqlite3.Connection:
     if not paths.DB.exists():
         raise NotIndexed("no index yet - run: crowbar build")
     if readonly:
-        # pathname2url percent-encodes ?/#/%/spaces in the path (e.g. USB mounts);
-        # a bare f-string would misparse them as the URI query.
-        con = sqlite3.connect(f"file:{pathname2url(str(paths.DB))}?mode=ro", uri=True, timeout=30)
+        con = sqlite3.connect(ro_uri(paths.DB), uri=True, timeout=30)
         con.execute("PRAGMA query_only=ON")
     else:
         con = sqlite3.connect(paths.DB, timeout=60)
     con.row_factory = sqlite3.Row
     return con
+
+
+def ro_uri(path) -> str:
+    """Read-only SQLite URI. as_uri() percent-encodes ?/#/%/spaces (e.g. USB mounts),
+    which a bare f-string would misparse as the URI query."""
+    return f"{path.resolve().as_uri()}?mode=ro"
 
 
 def schema_version(con: sqlite3.Connection) -> int:

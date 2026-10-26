@@ -1,13 +1,13 @@
 """Read-only query layer. Every function returns plain dicts (JSON-ready)."""
 from __future__ import annotations
 
+import json
 import re
 import sqlite3
-import urllib.request
+import time
 
 from . import datasets, db, paths
 
-CVE_RE = re.compile(r"CVE-\d{4}-\d{4,7}", re.I)
 
 
 # ---------------------------------------------------------------- helpers
@@ -70,6 +70,11 @@ def range_label(row: sqlite3.Row) -> str:
 
 
 # ---------------------------------------------------------------- search
+def _prefix(name: str) -> str:
+    """GLOB pattern for names starting with `name` (an index range, unlike LIKE '%x%')."""
+    return re.sub(r"([*?\[])", r"[\1]", name.lower()) + "*"
+
+
 def search(con: sqlite3.Connection, query: str = "", *, limit: int = 20,
            offset: int = 0, sort: str = "relevance", severity: str | None = None,
            year: int | None = None, since: str | None = None, kev: bool = False,
@@ -108,11 +113,11 @@ def search(con: sqlite3.Connection, query: str = "", *, limit: int = 20,
         where.append("EXISTS(SELECT 1 FROM cve_cwe w WHERE w.cve_id=c.id AND w.cwe=?)")
         params.append(cwe.upper())
     if product:
-        where.append("EXISTS(SELECT 1 FROM cve_product p WHERE p.cve_id=c.id AND p.product LIKE ?)")
-        params.append(f"%{product.lower()}%")
+        where.append("c.id IN (SELECT cve_id FROM cve_product WHERE product GLOB ?)")
+        params.append(_prefix(product))
     if vendor:
-        where.append("EXISTS(SELECT 1 FROM cve_product p WHERE p.cve_id=c.id AND p.vendor LIKE ?)")
-        params.append(f"%{vendor.lower()}%")
+        where.append("c.id IN (SELECT cve_id FROM cve_product WHERE vendor GLOB ?)")
+        params.append(_prefix(vendor))
     if ssvc:
         where.append("EXISTS(SELECT 1 FROM ssvc s WHERE s.cve_id=c.id AND s.exploitation=?)")
         params.append(ssvc)
@@ -231,39 +236,101 @@ def get_cve(con: sqlite3.Connection, cid: str) -> dict:
         "FROM advisory WHERE cve=? LIMIT 20", (cid,))]
     out["debian"] = [dict(x) for x in con.execute(
         "SELECT package, release, status, fixed, urgency FROM debian WHERE cve=? LIMIT 20", (cid,))]
+    out["mentions"] = _optional(con, "SELECT source, url, title, posted_at, score FROM mention "
+                                     "WHERE cve_id=? ORDER BY posted_at DESC LIMIT 20", (cid,))
+    return out
+
+
+def _optional(con: sqlite3.Connection, sql: str, params=()) -> list[dict]:
+    """Rows from a table an older index may not have yet (it appears on the next update)."""
+    try:
+        return [dict(x) for x in con.execute(sql, params)]
+    except sqlite3.OperationalError:
+        return []
+
+
+def _days_ago(days: float) -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - days * 86400))
+
+
+# ---------------------------------------------------------------- what's moving
+def trending(con: sqlite3.Connection, days: float = 7, limit: int = 25) -> list[dict]:
+    """CVEs people are posting about: ranked by how many distinct places mention them."""
+    return _optional(con, """
+        SELECT m.cve_id AS id, count(DISTINCT m.source) AS sources, count(*) AS posts,
+               group_concat(DISTINCT m.source) AS seen_on, max(m.posted_at) AS last_seen,
+               c.severity, c.cvss, c.epss, c.kev, c.has_exploit,
+               substr(c.description, 1, 160) AS description
+        FROM mention m LEFT JOIN cve c ON c.id = m.cve_id
+        WHERE m.posted_at >= ? GROUP BY m.cve_id
+        ORDER BY sources DESC, posts DESC, c.kev DESC, c.epss DESC LIMIT ?""",
+                     (_days_ago(days), limit))
+
+
+def new_since(con: sqlite3.Connection, since: str | None = None, days: float = 7,
+              limit: int = 25) -> dict:
+    """What changed since a date: KEV/EUVD exploited additions, new CVEs, new public PoCs."""
+    since = since or _days_ago(days)[:10]
+    def part(sql: str, order: str) -> dict:
+        total = _optional(con, f"SELECT count(*) n FROM ({sql})", (since,))
+        rows = _optional(con, f"{sql} {order} LIMIT ?", (since, limit))
+        return {"total": total[0]["n"] if total else 0, "rows": rows}
+    return {
+        "since": since,
+        "kev": part("SELECT cve, vendor, product, name, date_added, ransomware FROM kev "
+                    "WHERE date_added >= ?", "ORDER BY date_added DESC"),
+        "eu_exploited": part("SELECT m.cve_id AS cve, m.posted_at AS exploited_since, c.cvss, "
+                             "c.kev FROM mention m LEFT JOIN cve c ON c.id = m.cve_id "
+                             "WHERE m.source = 'euvd-exploited' AND m.posted_at >= ?",
+                             "ORDER BY m.posted_at DESC"),
+        "published": part("SELECT id, published, severity, cvss, epss, kev, has_exploit, "
+                          "substr(description, 1, 160) AS description FROM cve WHERE published >= ?",
+                          "ORDER BY kev DESC, epss DESC, cvss DESC"),
+        "pocs": part("SELECT cve_id AS cve, repo, url, stars, language, created_at FROM poc "
+                     "WHERE created_at >= ?", "ORDER BY stars DESC"),
+    }
+
+
+def data_as_of(con: sqlite3.Connection) -> dict:
+    """Newest row per source: how current the data is, not just when it was built."""
+    out = {}
+    for key, sql in (("cve_published", "SELECT max(published) FROM cve"),
+                     ("cve_modified", "SELECT max(modified) FROM cve"),
+                     ("kev_added", "SELECT max(date_added) FROM kev"),
+                     ("poc_created", "SELECT max(created_at) FROM poc"),
+                     ("mention_posted", "SELECT max(posted_at) FROM mention")):
+        try:
+            out[key] = con.execute(sql).fetchone()[0]
+        except sqlite3.OperationalError:
+            out[key] = None
     return out
 
 
 # ---------------------------------------------------------------- product
 def products(con: sqlite3.Connection, name: str, version: str | None = None,
              limit: int = 25) -> list[dict]:
-    q = f"%{name.lower()}%"
-    rows = con.execute(
-        "SELECT * FROM cpe_match WHERE product LIKE ? OR vendor LIKE ? LIMIT 20000",
-        (q, q)).fetchall()
-    grouped: dict[str, list[sqlite3.Row]] = {}
+    """CVEs whose CPE rows name the product (or vendor), ranked KEV > EPSS."""
+    n = name.lower()   # CPE vendor/product strings are lowercase
+    sel = "SELECT * FROM cpe_match WHERE "
+    # exact, then prefix (both index lookups); substring scan of all rows only as a last resort
+    rows = con.execute(sel + "product = ? OR vendor = ?", (n, n)).fetchall()
+    if not rows:
+        rows = con.execute(sel + "product GLOB ? OR vendor GLOB ?", (_prefix(n),) * 2).fetchall()
+    if not rows:
+        rows = con.execute(sel + "product LIKE ? OR vendor LIKE ? LIMIT 20000",
+                           (f"%{n}%", f"%{n}%")).fetchall()
+    hits: dict[str, list[sqlite3.Row]] = {}
     for r in rows:
-        grouped.setdefault(r["cve_id"], []).append(r)
-
-    matches = []
-    for cid, crows in grouped.items():
-        hits = [r for r in crows if version_affected(r, version)] if version else crows
-        if version and not hits:
-            continue
-        matches.append((cid, hits))
-    if version:
-        matches.sort(key=lambda p: (-len(p[1]), p[0]))
+        if not version or version_affected(r, version):
+            hits.setdefault(r["cve_id"], []).append(r)
     out = []
-    for cid, hits in matches[:limit]:
-        c = con.execute("SELECT * FROM cve WHERE id=?", (cid,)).fetchone()
-        if not c:
-            continue
+    for c in con.execute(
+            "SELECT c.*, (SELECT count(*) FROM cve_exploit x WHERE x.cve_id=c.id) AS exploits,"
+            " (SELECT count(*) FROM cve_nuclei n WHERE n.cve_id=c.id) AS nuclei_count"
+            " FROM cve c WHERE c.id IN (SELECT value FROM json_each(?))"
+            " ORDER BY c.kev DESC, c.epss DESC, c.id DESC LIMIT ?", (json.dumps(list(hits)), limit)):
         d = dict(c)
-        d["matched"] = sorted({range_label(h) for h in hits})[:6]
-        d["exploits"] = con.execute(
-            "SELECT count(*) FROM cve_exploit WHERE cve_id=?", (cid,)).fetchone()[0]
-        d["nuclei_count"] = con.execute(
-            "SELECT count(*) FROM cve_nuclei WHERE cve_id=?", (cid,)).fetchone()[0]
+        d["matched"] = sorted({range_label(h) for h in hits[d["id"]]})[:6]
         out.append(d)
     return out
 
@@ -310,6 +377,7 @@ def exploit_fetch(con: sqlite3.Connection, eid: str) -> dict:
         raise ValueError(f"unsafe exploit file path: {e['file']!r}")
     dest.parent.mkdir(parents=True, exist_ok=True)
     if not dest.exists():
+        import urllib.request
         req = urllib.request.Request(e["raw"], headers={"User-Agent": datasets.UA})
         with urllib.request.urlopen(req, timeout=60) as resp:
             dest.write_bytes(resp.read())
@@ -477,14 +545,15 @@ def toolkit_search(con: sqlite3.Connection, q: str, source: str | None = None,
     return [dict(r) for r in con.execute(sql, params)]
 
 
-def debian_lookup(con: sqlite3.Connection, package: str, cve: str | None = None) -> list[dict]:
+def debian_lookup(con: sqlite3.Connection, package: str, cve: str | None = None,
+                  limit: int = 50) -> list[dict]:
     sql = "SELECT * FROM debian WHERE package = ?"
     params: list = [package.lower()]
     if cve:
         sql += " AND cve = ?"
         params.append(cve.upper())
-    sql += " ORDER BY cve, release"
-    return [dict(r) for r in con.execute(sql, params)]
+    sql += " ORDER BY cve DESC, release LIMIT ?"   # newest CVEs first: `debian linux` has thousands
+    return [dict(r) for r in con.execute(sql, [*params, limit])]
 
 
 # ---------------------------------------------------------------- public PoCs
@@ -523,7 +592,15 @@ def poc_cves(con: sqlite3.Connection, limit: int = 25) -> list[dict]:
 
 # ---------------------------------------------------------------- meta
 def stats(con: sqlite3.Connection) -> dict:
-    counts = db.counts(con)
+    meta = db.meta(con)
+    try:   # build/update already counted every table; reuse it while it describes this DB
+        cached = json.loads((paths.INDEX / "stats.json").read_text())
+    except (OSError, ValueError):
+        cached = {}
+    if meta.get("updated_at") and cached.get("meta", {}).get("updated_at") == meta["updated_at"]:
+        counts = {k: v for k, v in cached.items() if isinstance(v, int) and k not in ("db_bytes", "rows_touched")}
+    else:
+        counts = db.counts(con)
     try:
         counts["cve_with_epss"] = con.execute(
             "SELECT count(*) FROM cve WHERE epss IS NOT NULL").fetchone()[0]
@@ -537,8 +614,9 @@ def stats(con: sqlite3.Connection) -> dict:
     except sqlite3.DatabaseError:
         pass
     counts["db_bytes"] = paths.DB.stat().st_size if paths.DB.exists() else 0
-    counts["meta"] = db.meta(con)
+    counts["meta"] = meta
     counts["freshness"] = datasets.freshness()
+    counts["data_as_of"] = data_as_of(con)
     return counts
 
 

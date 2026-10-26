@@ -6,6 +6,7 @@ from crowbar import __version__
 import json
 import os
 import sys
+import time
 import traceback
 
 from . import catalog, datasets, db, paths, query
@@ -88,6 +89,27 @@ TOOLS = [
         },
         "fn": lambda con, a: query.products(con, a["name"], a.get("version"),
                                        a.get("limit", 25)),
+    },
+    {
+        "name": "cb_trending",
+        "description": ("CVEs people are posting about right now, ranked by how many distinct places "
+                        "name them (Hacker News, oss-security, Full Disclosure, ZDI, Mastodon, ENISA "
+                        "EUVD exploited) with KEV/EPSS/CVSS beside each."),
+        "inputSchema": {"type": "object", "properties": {
+            "days": {"type": "number", "minimum": 1, "maximum": 365, "default": 7},
+            "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 25}}},
+        "fn": lambda con, a: query.trending(con, a.get("days", 7), a.get("limit", 25)),
+    },
+    {
+        "name": "cb_new",
+        "description": ("What changed since a date (default 7 days): CISA KEV and ENISA exploited "
+                        "additions, newly published CVEs (KEV > EPSS > CVSS first), new public PoCs. "
+                        "Each part has `total` and the top `rows`."),
+        "inputSchema": {"type": "object", "properties": {
+            "since": {"type": "string", "description": "YYYY-MM-DD"},
+            "days": {"type": "number", "minimum": 1, "maximum": 365, "default": 7},
+            "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 10}}},
+        "fn": lambda con, a: query.new_since(con, a.get("since"), a.get("days", 7), a.get("limit", 10)),
     },
     {
         "name": "cb_kev",
@@ -209,9 +231,10 @@ TOOLS = [
         "name": "cb_debian",
         "description": "Debian security tracker: per-release status and fixed version for a package.",
         "inputSchema": {"type": "object", "properties": {
-            "package": {"type": "string"}, "cve": {"type": "string"}},
+            "package": {"type": "string"}, "cve": {"type": "string"},
+            "limit": {"type": "integer", "minimum": 1, "maximum": 500, "default": 50}},
             "required": ["package"]},
-        "fn": lambda con, a: query.debian_lookup(con, a["package"], a.get("cve")),
+        "fn": lambda con, a: query.debian_lookup(con, a["package"], a.get("cve"), a.get("limit", 50)),
     },
     {
         "name": "cb_poc",
@@ -264,7 +287,8 @@ TOOLS = [
         "name": "cb_stats",
         "description": ("Corpus health and freshness. `index.age_days` is days since the last "
                         "update; `index.stale` means older than the 8-day NVD change window, so "
-                        "recent CVEs may be missing or outdated - say so and run `crowbar update`."),
+                        "recent CVEs may be missing or outdated - say so and run `crowbar update`. "
+                        "`index.last_error` is why the last background update failed."),
         "inputSchema": {"type": "object", "properties": {}},
         # the per-dataset freshness map is large; index_status() is the summary agents need
         "fn": lambda con, a: {**{k: v for k, v in query.stats(con).items() if k != "freshness"},
@@ -346,7 +370,11 @@ def handle(req: dict) -> None:
         try:
             result = tool["fn"](con, args)
             text, over = fit_response(result)
-            respond(rid, {"content": [{"type": "text", "text": text}], "isError": over})
+            content = [{"type": "text", "text": text}]
+            warn = check_freshness()
+            if warn:
+                content.append({"type": "text", "text": warn})
+            respond(rid, {"content": content, "isError": over})
         except Exception as exc:  # noqa: BLE001
             # Full detail (incl. filesystem paths) to stderr only; the client
             # gets the exception type and a root-redacted message.
@@ -361,9 +389,30 @@ def handle(req: dict) -> None:
         respond(rid, error={"code": -32601, "message": f"method not found: {method}"})
 
 
+_checked = [0.0]
+
+
+def check_freshness() -> str | None:
+    """At most every 10 minutes: start a background refresh if the index is a day old,
+    and return a note for the agent when it is stale (so a server that runs for days
+    neither serves old data silently nor waits for a restart to refresh)."""
+    if time.time() - _checked[0] < 600 or not paths.DB.exists():
+        return None
+    _checked[0] = time.time()
+    s = datasets.index_status()
+    if datasets.refresh_in_background(s):
+        print("crowbar mcp: index over a day old, refreshing in the background", file=sys.stderr)
+    if not s["stale"]:
+        return None
+    err = f"; last update failed: {s['last_error']['error']}" if s["last_error"] else ""
+    return (f"note: the crowbar index is {s['age_days']} days old{err}. CVEs published or "
+            f"changed since then may be missing - tell the user and suggest `crowbar update`.")
+
+
 def serve() -> None:
     if os.environ.get("CROWBAR_DEBUG"):
         print(f"crowbar mcp: {len(TOOLS)} tools, root={paths.ROOT}", file=sys.stderr)
+    # refresh early; the first tool call still checks, so it can warn the agent
     if paths.DB.exists() and datasets.refresh_in_background():
         print("crowbar mcp: index over a day old, refreshing in the background", file=sys.stderr)
     for line in sys.stdin:
