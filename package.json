@@ -1,6 +1,6 @@
 {
   "name": "crowbar-cli",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Retrieve CVEs and index them inside your codebase. One SQLite+FTS5 index, one CLI, one MCP server. Never answer a CVE from memory again.",
   "keywords": [
     "security",

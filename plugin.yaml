@@ -1,5 +1,5 @@
 name: crowbar
-version: 0.1.4
+version: 0.1.5
 description: >-
   Retrieve CVEs and index them inside your codebase - a local
   CVE/exploit/advisory index as an MCP server and skill.

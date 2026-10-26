@@ -1,6 +1,6 @@
 {
   "name": "crowbar",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Retrieve CVEs and index them inside your codebase: a local index of CVE, exploit and advisory data.",
   "contextFileName": "AGENTS.md",
   "mcpServers": {
