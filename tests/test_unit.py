@@ -323,6 +323,16 @@ class TestCLI(unittest.TestCase):
     def test_cve(self):
         self.assertEqual(self.json("cve", "CVE-2021-44228")["id"], "CVE-2021-44228")
 
+    def test_home_screen(self):
+        p = support.run_hv(home=str(HOME))
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertIn("crowbar trending", p.stdout)
+
+    def test_trending_new_bench(self):
+        self.assertEqual(self.json("trending")[0]["id"], "CVE-2021-44228")
+        self.assertIn("published", self.json("new", "--since", "2024-01-01"))
+        self.assertTrue(all(r["median_ms"] is not None for r in self.json("bench", "--runs", "1")["results"]))
+
     def test_search(self):
         self.assertTrue(self.json("search", "log4j"))
 
@@ -445,6 +455,10 @@ class TestMCP(unittest.TestCase):
 
     def test_search(self):
         self.assertTrue(self.call("cb_search", {"query": "log4j"}))
+
+    def test_trending_and_new(self):
+        self.assertEqual(self.call("cb_trending")[0]["id"], "CVE-2021-44228")
+        self.assertEqual(self.call("cb_new", {"since": "2024-01-01"})["published"]["total"], 2)
 
     def test_cve(self):
         self.assertEqual(self.call("cb_cve", {"id": "CVE-2021-44228"})["id"],
@@ -657,6 +671,145 @@ class TestFreshness(unittest.TestCase):
             cli.cmd_update(args)
         self.assertEqual(sync.call_args[0][0].tier, "lite")
         build.assert_called_once()
+
+    def test_stale_without_tier_still_catches_up(self):
+        from unittest import mock
+        from crowbar import cli
+        args = cli.build_parser().parse_args(["update"])
+        stale = {"stale": True, "tier": None, "age_days": 30}
+        with mock.patch.object(datasets, "index_status", return_value=stale), \
+                mock.patch.object(cli, "cmd_sync") as sync, mock.patch.object(cli, "cmd_build") as build:
+            cli.cmd_update(args)
+        self.assertIsNone(sync.call_args[0][0].tier)
+        build.assert_called_once()
+
+    def test_failed_nvd_download_keeps_age_and_records_why(self):
+        from unittest import mock
+        from crowbar import cli, indexer
+        self.age(2)
+        args = cli.build_parser().parse_args(["update", "--quiet"])
+        failed = [{"name": "nvd-modified", "status": "FAIL", "error": "offline"}]
+        with mock.patch.object(datasets, "sync", return_value=failed), \
+                mock.patch.object(indexer, "update") as upd, self.assertRaises(ValueError):
+            cli.cmd_update(args)
+        upd.assert_not_called()
+        s = datasets.index_status()
+        self.assertAlmostEqual(s["age_days"], 2, delta=0.2)
+        self.assertIn("offline", s["last_error"]["error"])
+        with mock.patch.object(datasets, "sync", return_value=[]), \
+                mock.patch.object(indexer, "update", return_value={"rows_touched": 0, "seconds": 0, "cve": 0}):
+            cli.cmd_update(args)
+        self.assertIsNone(datasets.index_status()["last_error"])
+
+
+class TestWhatsMoving(unittest.TestCase):
+    """mention table, trending, new_since, data_as_of, and the chatter archive."""
+
+    def test_trending_ranks_by_distinct_sources(self):
+        rows = query.trending(CON, days=7)
+        self.assertEqual(rows[0]["id"], "CVE-2021-44228")
+        self.assertEqual(rows[0]["sources"], 3)
+        self.assertNotIn("CVE-2017-0144", {r["id"] for r in rows})   # 40 days old
+        self.assertIn("CVE-2017-0144", {r["id"] for r in query.trending(CON, days=60)})
+
+    def test_new_since(self):
+        d = query.new_since(CON, since="2024-01-01")
+        self.assertEqual({r["id"] for r in d["published"]["rows"]}, {"CVE-2024-2222", "CVE-2025-3333"})
+        self.assertEqual(d["published"]["total"], 2)
+        self.assertEqual(d["eu_exploited"]["rows"][0]["cve"], "CVE-2021-44228")
+        self.assertEqual(query.new_since(CON, since="2099-01-01")["published"]["total"], 0)
+
+    def test_cve_carries_mentions_and_data_age(self):
+        self.assertEqual(len(query.get_cve(CON, "CVE-2021-44228")["mentions"]), 3)
+        self.assertEqual(query.data_as_of(CON)["cve_published"], "2025-02-02")
+
+    def test_old_index_without_mention_table(self):
+        con = sqlite3.connect(":memory:")
+        con.row_factory = sqlite3.Row
+        con.execute("CREATE TABLE cve(id, description, severity, cvss, epss, kev, has_exploit)")
+        self.assertEqual(query.trending(con), [])
+
+    def test_archive_merges_and_drops_posts_without_cves(self):
+        import tempfile
+        from unittest import mock
+        from crowbar import chatter
+        rss = """<rss><channel>
+          <item><title>CVE-2021-44228 again</title><link>https://x/1</link>
+                <pubDate>Mon, 26 Oct 2026 02:11:58 GMT</pubDate></item>
+          <item><title>no ids here</title><link>https://x/2</link></item>
+        </channel></rss>"""
+        data = pathlib.Path(tempfile.mkdtemp())
+        dest = data / "chatter" / "oss-security.jsonl"
+        with mock.patch.object(chatter, "_get", return_value=rss):
+            chatter.fetch("oss-security", dest)
+            chatter.fetch("oss-security", dest)   # same items: no duplicates
+        rows = [json.loads(x) for x in dest.read_text().splitlines()]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["cves"], ["CVE-2021-44228"])
+        self.assertEqual(rows[0]["posted_at"], "2026-10-26T02:11:58Z")
+        con = sqlite3.connect(":memory:")
+        with mock.patch.object(paths, "DATA", data):
+            self.assertEqual(chatter.load(con), 1)
+
+
+class TestMcpFreshnessNote(unittest.TestCase):
+    def test_stale_index_adds_a_note_at_most_every_10_minutes(self):
+        from unittest import mock
+        from crowbar import mcp
+        stale = {"stale": True, "age_days": 12, "auto_update": False,
+                 "last_error": {"at": "x", "error": "offline"}}
+        mcp._checked[0] = 0.0
+        with mock.patch.object(datasets, "index_status", return_value=stale), \
+                mock.patch.object(paths, "DB", DB):
+            note = mcp.check_freshness()
+            self.assertIn("12 days old", note)
+            self.assertIn("offline", note)
+            self.assertIsNone(mcp.check_freshness())   # throttled
+
+
+class TestOptionalSources(unittest.TestCase):
+    def test_failed_chatter_does_not_fail_sync(self):
+        from unittest import mock
+        from crowbar import cli
+        args = cli.build_parser().parse_args(["sync", "--only", "chatter"])
+        failed = [{"name": n, "status": "FAIL", "error": "x"} for n in ("hn", "zdi")]
+        with mock.patch.object(datasets, "sync", return_value=failed), \
+                mock.patch.object(cli, "_writer_lock"):
+            cli.cmd_sync(args)   # no SystemExit
+        self.assertFalse(any(d.name == "hn" for d in datasets.tier_plan("lite")
+                             if not d.optional))
+
+
+class TestUpdateKeepsLinks(unittest.TestCase):
+    """An NVD re-load must not wipe Nuclei/Metasploit links; EPSS reaches every CVE."""
+
+    def test_delete_cves_keeps_link_tables_and_epss_applies(self):
+        import shutil
+        import tempfile
+        from crowbar import indexer
+        db = pathlib.Path(tempfile.mkdtemp()) / "c.db"
+        shutil.copy(DB, db)
+        con = sqlite3.connect(db)
+        indexer.delete_cves(con, ["CVE-2021-44228"])
+        self.assertEqual(con.execute("SELECT count(*) FROM cve_nuclei WHERE cve_id='CVE-2021-44228'")
+                         .fetchone()[0], 1)
+        indexer.apply_epss(con, {"CVE-2017-0144": (0.5, 77.0)})
+        self.assertEqual(con.execute("SELECT epss FROM cve WHERE id='CVE-2017-0144'").fetchone()[0], 0.5)
+        con.close()
+
+    def test_indexes_apply_to_an_existing_db(self):
+        import shutil
+        import tempfile
+        from crowbar import indexer
+        db = pathlib.Path(tempfile.mkdtemp()) / "c.db"
+        shutil.copy(DB, db)
+        con = sqlite3.connect(db)
+        con.execute("CREATE INDEX IF NOT EXISTS cpe_id ON cpe_match(cve_id)")   # retired
+        indexer.finish(con)
+        names = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='index'")}
+        self.assertIn("cve_kev_epss", names)
+        self.assertNotIn("cpe_id", names)
+        con.close()
 
 
 class TestKevEpss(unittest.TestCase):

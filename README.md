@@ -139,6 +139,24 @@ prebuilt mirror instead of the upstream feeds, set `CROWBAR_MIRROR` - see
 | `heavy` | ~2 GB | + Exploit-DB, Nuclei, Metasploit, OSV, PoC |
 | `extreme` | full | + MSRC, Apple, Debian - every source |
 
+## Fresh, and fast
+
+- **It keeps itself current.** Each CLI call and MCP session checks the index age.
+  Once it is a day old, crowbar refreshes it in the background: NVD changes, KEV,
+  EPSS for every CVE, new PoCs and CVE chatter. An index past NVD's 8-day change
+  window gets a re-sync and rebuild, so no gap is left behind. A refresh that
+  fails (you were offline, or an upstream was down) never stamps the index fresh.
+  `crowbar doctor`, `cb_stats` and the MCP answers themselves report how old the
+  data is and why the last refresh failed.
+- **It knows what's moving.** `crowbar trending` ranks CVEs by how many places
+  name them: Hacker News, oss-security, Full Disclosure, ZDI, Mastodon, and
+  ENISA's exploited list (the EU counterpart to CISA KEV). `crowbar new` shows
+  KEV/EUVD additions, new CVEs and new PoCs since a date. `crowbar cve` lists
+  where each CVE was discussed.
+- **Speed you can measure.** `crowbar bench` times the queries agents run most
+  on *your* index. They are local SQLite lookups on indexed columns, with no
+  network, API key or rate limit.
+
 ## How crowbar works
 
 <img src="docs/assets/flow.svg" alt="agent asks crowbar over MCP, crowbar answers from the local index, the agent gets a grounded answer" width="760" />
@@ -156,6 +174,8 @@ authorization. CLI commands use the same read layer.
 | What does this CVE mean, and is it serious? | CVSS, EPSS, KEV, SSVC, CWE, CPE ranges, refs, PoCs | `crowbar cve CVE-2021-44228` |
 | We run product X version Y - what's exploitable? | Only CVEs whose CPE range covers Y, with the matched range | `crowbar product nginx --version 1.18.0` |
 | Is it exploited in the wild? | CISA KEV + SSVC `active`/`poc`/`none` | `crowbar kev`, `crowbar cve <id>` |
+| What is everyone talking about this week? | CVEs ranked by how many places post about them | `crowbar trending` |
+| What changed since Monday? | KEV/EUVD exploited additions, new CVEs, new PoCs | `crowbar new --since 2026-10-19` |
 | Where's a working exploit or detection? | Exploit-DB, Nuclei templates, Metasploit modules | `crowbar exploit log4j` · `crowbar nuclei <q>` · `crowbar msf <q>` |
 | A public PoC repo for this CVE? | GitHub PoC metadata (stars, language) - never cloned | `crowbar poc --cve <id>` |
 | Is this npm / PyPI / Go package affected? | OSV/GHSA advisories with introduced/fixed ranges | `crowbar advisory --package lodash --ecosystem npm` |

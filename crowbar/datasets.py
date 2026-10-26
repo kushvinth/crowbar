@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import calendar
-import concurrent.futures as cf
 import hashlib
 import json
 import os
@@ -18,10 +17,9 @@ import threading
 import time
 import urllib.error
 import urllib.parse
-import urllib.request
 from dataclasses import dataclass
 
-from . import db, paths
+from . import chatter, db, paths
 
 try:
     import fcntl
@@ -113,6 +111,11 @@ CORE_INTEL = [
             "models/models.dev.json", "LLM catalog: providers, context, price"),
 ]
 
+# small JSONL archives of posts naming a CVE; refreshed on every update
+# optional: a flaky feed must never block a sync or the stale-index catch-up
+CHATTER = [Dataset(name, "chatter", "chatter", url, f"chatter/{name}.jsonl", note, optional=True)
+           for name, (url, note) in chatter.SOURCES.items()]
+
 OSV_ECOSYSTEMS = [
     ("npm", 209), ("PyPI", 35), ("Go", 12), ("Maven", 10), ("NuGet", 3),
     ("RubyGems", 5), ("crates.io", 3), ("Packagist", 10), ("Debian", 73), ("Alpine", 4),
@@ -172,7 +175,7 @@ def attack_enterprise() -> Dataset:
 def registry(with_extra: bool = False, with_bulk: bool = False) -> list[Dataset]:
     items = [_nvd(y) for y in paths.YEARS]
     items += [_nvd(0, "recent"), _nvd(0, "modified")]
-    items += CORE_INTEL + TOOLKIT
+    items += CORE_INTEL + CHATTER + TOOLKIT
     items.append(attack_enterprise())
     if with_extra or with_bulk:
         items += EXTRA_INTEL
@@ -206,7 +209,7 @@ def plan(only: list[str] | None = None, years: list[int] | None = None,
 TIER_NAMES = ["lite", "medium", "heavy", "extreme"]
 TIER_SIZES = {"lite": "~150MB", "medium": "~500MB", "heavy": "~2GB", "extreme": "full"}
 _TIER_ADD = {
-    "lite":   {"nvd", "kev", "epss", "cwe"},
+    "lite":   {"nvd", "kev", "epss", "cwe", "chatter"},
     "medium": {"cveorg", "capec", "attack", "vulnrichment"},
     "heavy":  {"exploitdb", "nuclei", "metasploit", "osv", "poc", "toolkit"},
     # extreme == every source (handled in tier_plan)
@@ -228,7 +231,7 @@ def tier_missing(tier: str | None) -> list[str]:
     i.e. downloads that failed or were never run. Empty when no tier is set."""
     if not tier or tier not in TIER_NAMES:
         return []
-    expected = {ds.name for ds in tier_plan(tier)}
+    expected = {ds.name for ds in tier_plan(tier) if not ds.optional}
     present = set(load_manifest().get("datasets", {}).keys())
     return sorted(expected - present)
 
@@ -285,7 +288,7 @@ def human(n: float) -> str:
 def http_get(url: str, dest: pathlib.Path, retries: int = 7, timeout: int = 180,
              since: str | None = None) -> tuple[int, str] | None:
     """Download atomically. Returns (bytes, last_modified) or None on HTTP 304."""
-    import email.utils  # noqa: F401
+    import urllib.request   # lazy: read-only commands never download
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_name(dest.name + ".part")
     if tmp.exists():
@@ -362,10 +365,20 @@ APPLE_ROWS = re.compile(
     r'<td[^>]*><p[^>]*>(.*?)</p></td>\s*<td[^>]*><p[^>]*>([^<]*)</p></td>', re.S)
 
 
-def http_text(url: str, timeout: int = 60) -> str:
-    req = urllib.request.Request(url, headers={"User-Agent": UA})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return r.read().decode("utf-8", errors="replace")
+def http_text(url: str, timeout: int = 60, retries: int = 4) -> str:
+    import http.client
+    import urllib.request
+    req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept-Encoding": "identity"})
+    for attempt in range(retries):
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                return r.read().decode("utf-8", errors="replace")
+        except (OSError, http.client.HTTPException) as exc:
+            # a 4xx will not change on retry; resets, truncations and 5xx often do
+            if attempt == retries - 1 or (isinstance(exc, urllib.error.HTTPError) and exc.code < 500):
+                raise
+            time.sleep(2 ** attempt + random.uniform(0, 1))
+    raise AssertionError("unreachable")
 
 
 def msrc_fetch(dest: pathlib.Path) -> int:
@@ -382,6 +395,7 @@ def msrc_fetch(dest: pathlib.Path) -> int:
 
 
 def apple_fetch(dest: pathlib.Path) -> int:
+    import concurrent.futures as cf
     html = http_text("https://support.apple.com/en-us/100100")
     dest.mkdir(parents=True, exist_ok=True)
     (dest / "index.html").write_text(html)
@@ -504,6 +518,8 @@ def sync_one(d: Dataset, manifest: dict, force: bool = False, pull: bool = False
             size, digest = msrc_fetch(d.path), ""
         elif d.kind == "apple":
             size, digest = apple_fetch(d.path), ""
+        elif d.kind == "chatter":
+            size, digest = chatter.fetch(d.name, d.path), ""
         elif d.kind == "git":
             state = git_clone(d.url, d.path, pull=pull, sparse=d.sparse)
             head = git_head(d.path)
@@ -542,6 +558,7 @@ def sync_one(d: Dataset, manifest: dict, force: bool = False, pull: bool = False
 
 def sync(items: list[Dataset], force: bool = False, jobs: int = 4,
          pull: bool = False, progress=None) -> list[dict]:
+    import concurrent.futures as cf
     manifest = load_manifest()
     results: list[dict] = []
     mirror = None
@@ -599,24 +616,44 @@ REFRESH_AFTER_DAYS = 1   # background refresh once the index is a day old
 STALE_AFTER_DAYS = 7     # NVD's modified feed covers 8 days; older means a gap
 
 
-def index_status() -> dict:
-    """How old the index is, from the meta rows each build/update writes with the data."""
-    try:
-        con = db.connect()
-    except (db.NotIndexed, sqlite3.Error):
-        meta = {}
-    else:
-        meta = db.meta(con)
-        con.close()
+def index_status(meta: dict | None = None) -> dict:
+    """How old the index is, from the meta rows each build/update writes with the data.
+    Pass `meta` from an open connection to skip opening the DB again."""
+    if meta is None:
+        try:
+            con = db.connect()
+        except (db.NotIndexed, sqlite3.Error):
+            meta = {}
+        else:
+            meta = db.meta(con)
+            con.close()
     last = max(filter(None, (meta.get("updated_at"), meta.get("built_at"))), default=None)
     age = None
     if last:
         age = round((time.time() - calendar.timegm(time.strptime(last, "%Y-%m-%dT%H:%M:%SZ")))
                     / 86400, 1)
+    try:
+        last_error = json.loads((paths.INDEX / "update.err").read_text())
+    except (OSError, ValueError):
+        last_error = None
     return {"last_update": last, "age_days": age,
             "stale": age is not None and age > STALE_AFTER_DAYS,
             "tier": load_manifest().get("tier"),
-            "auto_update": not os.environ.get("CROWBAR_NO_AUTO_UPDATE")}
+            "auto_update": not os.environ.get("CROWBAR_NO_AUTO_UPDATE"),
+            "last_error": last_error}
+
+
+def note_update(error: str | None) -> None:
+    """Record why the last update failed (shown by doctor/stats/MCP), or clear it."""
+    err = paths.INDEX / "update.err"
+    try:
+        if error is None:
+            err.unlink(missing_ok=True)
+        else:
+            err.write_text(json.dumps({"at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                                       "error": error[:500]}))
+    except OSError:   # read-only index
+        pass
 
 
 _held: list = []   # this process's open lock file; closing it releases the lock
@@ -667,13 +704,13 @@ def update_running() -> bool:
         return False
 
 
-def refresh_in_background() -> bool:
+def refresh_in_background(status: dict | None = None) -> bool:
     """Start a detached `crowbar update` when the index is over a day old.
 
     At most one attempt per hour (lock file mtime), so an offline machine or a
     failing source does not respawn it on every call, and never while another
     update holds the lock. CROWBAR_NO_AUTO_UPDATE=1 turns it off."""
-    s = index_status()
+    s = status or index_status()
     if not s["auto_update"] or s["age_days"] is None or s["age_days"] < REFRESH_AFTER_DAYS:
         return False
     lock = paths.INDEX / "update.lock"

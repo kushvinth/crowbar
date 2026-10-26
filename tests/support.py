@@ -8,6 +8,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import time
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 HV = ROOT / "bin" / "crowbar"
@@ -210,6 +211,16 @@ def make_fixture_db(path: pathlib.Path) -> pathlib.Path:
          "https://github.com/example/log4shell", 100, "Java"),
         ("poc-in-github", "CVE-2017-0144", "example/eternalblue",
          "https://github.com/example/eternalblue", 50, "Python")])
+    def ago(days):   # mentions are dated relative to now so `trending` windows stay stable
+        return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - days * 86400))
+    con.executemany("INSERT INTO mention VALUES (?,?,?,?,?,?)", [
+        ("hn", "CVE-2021-44228", "https://news.ycombinator.com/item?id=1", "Log4Shell", ago(1), 900),
+        ("mastodon", "CVE-2021-44228", "https://mastodon.social/@a/1", "patch log4j", ago(2), 12),
+        ("euvd-exploited", "CVE-2021-44228", "https://euvd.enisa.europa.eu/vulnerability/EUVD-1",
+         "EUVD-1 exploited", ago(3), None),
+        ("oss-security", "CVE-2024-2222", "https://seclists.org/oss-sec/2024/q1/1", "regreSSHion",
+         ago(1), None),
+        ("hn", "CVE-2017-0144", "https://news.ycombinator.com/item?id=2", "EternalBlue", ago(40), 300)])
     con.executemany("INSERT INTO meta VALUES (?,?)", [
         ("schema", "3"), ("built_at", "2026-01-01T00:00:00Z"),
         ("updated_at", "2026-01-01T00:00:00Z")])
