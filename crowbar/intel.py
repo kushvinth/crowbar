@@ -9,15 +9,14 @@ from __future__ import annotations
 import hashlib
 import json
 import pathlib
-import re
 import sqlite3
 import tarfile
 import time
 
-from . import datasets, paths
+from . import datasets, loaders, paths
+from .loaders import CVE_RE
 
 BATCH = 1500
-CVE_RE = re.compile(r"^CVE-\d{4}-\d{4,7}$", re.I)
 
 
 def _now() -> str:
@@ -25,9 +24,7 @@ def _now() -> str:
 
 
 def _norm(value: str | None, limit: int = 6000) -> str:
-    if not value:
-        return ""
-    return re.sub(r"\s+", " ", str(value)).strip()[:limit]
+    return loaders.norm(value, limit)
 
 
 def _sha256(path: pathlib.Path) -> str:
@@ -215,7 +212,7 @@ def parse_cveorg(doc: dict | list) -> dict | None:
         return None
     meta = doc.get("cveMetadata") or {}
     cid = (meta.get("cveId") or "").upper()
-    if not CVE_RE.match(cid):
+    if not CVE_RE.fullmatch(cid):
         return None
     cna = (doc.get("containers") or {}).get("cna") or {}
     desc = ""
@@ -422,7 +419,7 @@ def load_poc_github(path: pathlib.Path, con: sqlite3.Connection, progress=None) 
             if not member.isfile() or not member.name.endswith(".json"):
                 continue
             name = member.name.rsplit("/", 1)[-1][:-5]
-            if not CVE_RE.match(name):
+            if not CVE_RE.fullmatch(name):
                 continue
             fh = tf.extractfile(member)
             if fh is None:

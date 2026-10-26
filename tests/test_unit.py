@@ -1002,7 +1002,19 @@ class TestExploitOffline(unittest.TestCase):
         row = CON.execute("SELECT id FROM exploit LIMIT 1").fetchone()
         out = query.exploit_lookup(CON, str(row[0]))
         self.assertEqual(str(out["id"]), str(row[0]))
-        self.assertIn("crowbar exploit", out["fetch"])   # points at the CLI for source
+        self.assertIn("--fetch", out["fetch"])   # points at the CLI for source
+
+    def test_filter_only_browse(self):
+        self.assertTrue(query.nuclei_search(CON, None))
+        self.assertEqual(query.toolkit_search(CON, None, "gtfobins")[0]["source"], "gtfobins")
+        self.assertTrue(query.attack_lookup(CON))
+        self.assertTrue(query.msf_search(CON))
+
+    def test_doctor_json(self):
+        p = support.run_hv("doctor", "--json", home=str(HOME))
+        r = json.loads(p.stdout)
+        self.assertEqual(p.returncode, 0 if r["ok"] else 1)
+        self.assertEqual(r["schema"], paths.SCHEMA_VERSION)
 
     def test_exploit_lookup_missing(self):
         self.assertEqual(query.exploit_lookup(CON, "99999999")["error"], "not_found")

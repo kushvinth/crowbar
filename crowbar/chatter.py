@@ -12,8 +12,8 @@ import time
 from datetime import datetime, timezone
 
 from . import paths
+from .loaders import CVE_RE
 
-CVE_RE = re.compile(r"CVE-\d{4}-\d{4,7}", re.I)
 TAG_RE = re.compile(r"<[^>]+>")
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS mention(source TEXT, cve_id TEXT, url TEXT, title TEXT,

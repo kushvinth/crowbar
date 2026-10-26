@@ -25,10 +25,12 @@ MSRC_SEVERITY = {100000000: "Critical", 100000001: "Important",
                  100000002: "Moderate", 100000003: "Low"}
 
 
-def _norm(s: str | None, limit: int = 4000) -> str:
+def norm(s, limit: int = 4000) -> str:
+    """Collapse whitespace and cap length (shared by every loader)."""
     if not s:
         return ""
-    return re.sub(r"\s+", " ", s).strip()[:limit]
+    return re.sub(r"\s+", " ", str(s)).strip()[:limit]
+
 
 
 # ---------------------------------------------------------------- OSV
@@ -86,7 +88,7 @@ def load_osv_zip(path: pathlib.Path, con: sqlite3.Connection) -> int:
                                    ",".join(a["versions"])[:1000]))
             adv[(aid, eco_default)] = {
                 "id": aid, "ecosystem": first_eco, "package": first_pkg, "cve": cve,
-                "summary": _norm(doc.get("summary") or doc.get("details"), 800),
+                "summary": norm(doc.get("summary") or doc.get("details"), 800),
                 "severity": sev, "published": doc.get("published"),
                 "modified": doc.get("modified"),
                 "url": f"https://osv.dev/vulnerability/{aid}",
@@ -126,7 +128,7 @@ def load_debian(path: pathlib.Path, con: sqlite3.Connection) -> int:
         for cve, info in cves.items():
             if not CVE_RE.fullmatch(cve):
                 continue
-            desc = _norm((info or {}).get("description"), 500)
+            desc = norm((info or {}).get("description"), 500)
             for rel, rinfo in ((info or {}).get("releases") or {}).items():
                 rows.append((pkg.lower(), rel, cve, (rinfo or {}).get("status", ""),
                              (rinfo or {}).get("fixed_version", ""),
@@ -288,7 +290,7 @@ def load_msf_source(root: pathlib.Path, con: sqlite3.Connection) -> int:
                      name_m.group(1) if name_m else "/".join(parts[2:]).removesuffix(".rb"),
                      platform, 1 if (priv and priv.group(1) == "true") else 0,
                      date_m.group(1) if date_m else "",
-                     _norm(dm.group(1) if dm else "", 1200), ",".join(cves)))
+                     norm(dm.group(1) if dm else "", 1200), ",".join(cves)))
         for c in cves:
             pairs.append((c, rel))
     con.execute("DELETE FROM msf")
@@ -365,15 +367,15 @@ def load_toolkit(root: pathlib.Path, source: str, con: sqlite3.Connection) -> in
         if not tags:
             m = re.search(r"^(?:functions|tags):\s*(.+)$", text, re.M)
             if m:
-                tags = _norm(m.group(1), 200)
+                tags = norm(m.group(1), 200)
         desc = ""
         dm = re.search(r"^description:\s*(.+)$", text, re.M)
         if dm:
-            desc = _norm(dm.group(1), 400)
+            desc = norm(dm.group(1), 400)
         body = re.sub(r"^---.*?---", "", text, flags=re.S)
         if not desc:
             heading = re.search(r"^#\s+(.+)$", body, re.M)
-            desc = _norm(heading.group(1) if heading else body, 400)
+            desc = norm(heading.group(1) if heading else body, 400)
         rows.append((source, name, rel, desc, tags))
     con.execute("DELETE FROM toolkit WHERE source=?", (source,))
     con.executemany("INSERT INTO toolkit(source,name,path,description,tags) VALUES (?,?,?,?,?)", rows)

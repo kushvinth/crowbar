@@ -325,15 +325,21 @@ def cmd_kev(args) -> None:
 def cmd_exploit(args) -> None:
     con = connect_or_die()
     if args.query.isdigit():
-        try:
-            e = query.exploit_fetch(con, args.query)
-        except KeyError:
-            die(f"exploit {args.query} not found")
+        if args.fetch:
+            try:
+                e = query.exploit_fetch(con, args.query)
+            except KeyError:
+                die(f"exploit {args.query} not found")
+        else:
+            e = query.exploit_lookup(con, args.query)
+            if e.get("error"):
+                die(f"exploit {args.query} not found")
         if args.json:
             out_json(e)
         else:
             print(f"{BOLD}{e['id']}{RST} {e['platform']} {e['type']}  {e['description']}")
-            print(f"{DIM}local:{RST} {e['local_path']}")
+            print(f"{DIM}local:{RST} {e['local_path']}" if e["local_path"]
+                  else f"{DIM}not on disk - {e['fetch'].split('   #')[0]}{RST}")
         return
     rows = query.exploit_search(con, args.query, args.limit)
     if args.json:
@@ -927,62 +933,76 @@ def _update(args, indexer) -> None:
 
 
 def cmd_doctor(args) -> None:
-    ok = True
-    print(f"{BOLD}crowbar doctor{RST}")
-    print(f"  python    {sys.version.split()[0]}")
-    print(f"  root      {paths.ROOT}")
-    print(f"  drive     {'yes' if paths.is_drive_root() else 'no'}")
+    """Health check; `--json` gives agents the same facts, exit 1 = needs attention."""
+    r: dict = {"python": sys.version.split()[0], "root": str(paths.ROOT),
+               "drive": paths.is_drive_root(), "problems": []}
     if paths.HOME_LINK.is_symlink():
-        print(f"  home link {paths.HOME_LINK} -> {os.readlink(paths.HOME_LINK)}")
-    if not paths.DB.exists():
-        print("  index     MISSING - run: crowbar sync && crowbar build")
-        sys.exit(1)
-    con = db.connect()
-    ver = db.schema_version(con)
-    print(f"  schema    v{ver} {'ok' if ver == paths.SCHEMA_VERSION else 'MISMATCH - rebuild'}")
-    ok = ok and ver == paths.SCHEMA_VERSION
-    _integ = con.execute("PRAGMA quick_check").fetchone()[0]
-    print(f"  integrity {_integ}")
-    ok = ok and _integ == "ok"
-    s = query.stats(con)
-    print(f"  cves      {s.get('cve', 0):,} · kev {s.get('cve_kev', 0):,} · "
-          f"exploits {s.get('cve_with_exploit', 0):,} · cpe ranges {s.get('cpe_match', 0):,}")
+        r["home_link"] = os.readlink(paths.HOME_LINK)
+    if paths.DB.exists():
+        con = db.connect()
+        r["schema"] = db.schema_version(con)
+        r["integrity"] = con.execute("PRAGMA quick_check").fetchone()[0]
+        s = query.stats(con)
+        r["counts"] = {k: s.get(k, 0) for k in ("cve", "cve_kev", "cve_with_exploit", "cpe_match")}
+        if r["schema"] != paths.SCHEMA_VERSION:
+            r["problems"].append(f"schema v{r['schema']} != v{paths.SCHEMA_VERSION} - run: crowbar "
+                                 f"{'update' if r['schema'] < paths.SCHEMA_VERSION else 'build'}")
+        if r["integrity"] != "ok":
+            r["problems"].append(f"integrity: {r['integrity']}")
+    else:
+        r["problems"].append("index missing - run: crowbar sync && crowbar build")
     m = datasets.load_manifest()
-    missing = [v["path"] for v in m.get("datasets", {}).values() if not (paths.DATA / v["path"]).exists()]
-    print(f"  datasets  {len(m.get('datasets', {}))} tracked, {len(missing)} missing")
-    if m.get("tier"):
-        print(f"  tier      {m['tier']} ({datasets.TIER_SIZES.get(m['tier'], '?')})")
-        incomplete = datasets.tier_missing(m["tier"])
+    r["datasets"] = len(m.get("datasets", {}))
+    r["missing"] = [v["path"] for v in m.get("datasets", {}).values() if not (paths.DATA / v["path"]).exists()]
+    r["tier"] = m.get("tier")
+    if r["tier"]:
+        incomplete = datasets.tier_missing(r["tier"])
         if incomplete:
-            ok = False
-            shown = ", ".join(incomplete[:6]) + (" …" if len(incomplete) > 6 else "")
-            print(f"  {YEL}incomplete - tier {m['tier']} is missing {len(incomplete)} "
-                  f"dataset(s): {shown}{RST}")
-            print(f"  {YEL}re-run: crowbar sync --tier {m['tier']} && crowbar build --tier {m['tier']}{RST}")
-    for p in missing[:5]:
-        print(f"    {DIM}missing {p}{RST}")
+            r["problems"].append(f"tier {r['tier']} is missing {', '.join(incomplete[:6])}"
+                                 f"{' …' if len(incomplete) > 6 else ''} - re-run: crowbar sync --tier "
+                                 f"{r['tier']} && crowbar build --tier {r['tier']}")
     if paths.HOME_LINK.is_symlink() and paths.HOME_LINK.exists():
         try:
             (paths.HOME_LINK / "index/state.json").read_text()
         except OSError:
-            print(f"  {YEL}drive unreadable by this process - for the launchd agent,"
-                  f" grant Full Disk Access to /bin/sh{RST}")
-    fresh = datasets.index_status()
-    if fresh["age_days"] is not None:
-        print(f"  fresh     {fresh['age_days']} days since update"
-              f"{'' if fresh['auto_update'] else ' (auto-update off)'}")
-        if fresh["stale"]:
+            r["problems"].append("drive unreadable by this process - for the launchd agent, "
+                                 "grant Full Disk Access to /bin/sh")
+    r["fresh"] = datasets.index_status() if paths.DB.exists() else None
+    if r["fresh"] and r["fresh"]["last_error"]:
+        r["problems"].append(f"last update failed {r['fresh']['last_error']['at']}: "
+                             f"{r['fresh']['last_error']['error']}")
+    r["disk_free"] = shutil.disk_usage(paths.ROOT).free
+    r["ok"] = not r["problems"]
+    if args.json:
+        out_json(r)
+        sys.exit(0 if r["ok"] else 1)
+    print(f"{BOLD}crowbar doctor{RST}")
+    print(f"  python    {r['python']}\n  root      {r['root']}\n  drive     {'yes' if r['drive'] else 'no'}")
+    if "home_link" in r:
+        print(f"  home link {paths.HOME_LINK} -> {r['home_link']}")
+    if "schema" in r:
+        c = r["counts"]
+        print(f"  schema    v{r['schema']} {'ok' if r['schema'] == paths.SCHEMA_VERSION else 'MISMATCH'}")
+        print(f"  integrity {r['integrity']}")
+        print(f"  cves      {c['cve']:,} · kev {c['cve_kev']:,} · exploits {c['cve_with_exploit']:,}"
+              f" · cpe ranges {c['cpe_match']:,}")
+    print(f"  datasets  {r['datasets']} tracked, {len(r['missing'])} missing")
+    if r["tier"]:
+        print(f"  tier      {r['tier']} ({datasets.TIER_SIZES.get(r['tier'], '?')})")
+    for p in r["missing"][:5]:
+        print(f"    {DIM}missing {p}{RST}")
+    f = r["fresh"]
+    if f and f["age_days"] is not None:
+        print(f"  fresh     {f['age_days']} days since update{'' if f['auto_update'] else ' (auto-update off)'}")
+        if f["stale"]:
             print(f"  {YEL}stale - run: crowbar update{RST}")
-        if fresh["last_error"]:
-            ok = False
-            print(f"  {YEL}last update failed {fresh['last_error']['at']}: "
-                  f"{fresh['last_error']['error']}{RST}")
-    free = shutil.disk_usage(paths.ROOT).free
-    print(f"  disk      {datasets.human(free)} free")
-    if free < 3 * 1024 ** 3:
+    print(f"  disk      {datasets.human(r['disk_free'])} free")
+    if r["disk_free"] < 3 * 1024 ** 3:
         print(f"  {YEL}low disk - index rebuild needs ~2x current db size{RST}")
-    print(f"\n{'ready' if ok else 'needs attention'}")
-    sys.exit(0 if ok else 1)
+    for problem in r["problems"]:
+        print(f"  {YEL}{problem}{RST}")
+    print(f"\n{'ready' if r['ok'] else 'needs attention'}")
+    sys.exit(0 if r["ok"] else 1)
 
 
 # ---------------------------------------------------------------- project links
@@ -1510,19 +1530,20 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--limit", type=int, default=25)
     s.add_argument("--json", action="store_true")
 
-    s = add("exploit", cmd_exploit, "search Exploit-DB, or fetch one by id")
+    s = add("exploit", cmd_exploit, "search Exploit-DB, or show one by id")
     s.add_argument("query")
+    s.add_argument("--fetch", action="store_true", help="download the source for an id")
     s.add_argument("--limit", type=int, default=20)
     s.add_argument("--json", action="store_true")
 
     s = add("nuclei", cmd_nuclei, "search Nuclei templates")
-    s.add_argument("query")
+    s.add_argument("query", nargs="?")
     s.add_argument("--domain", help="http, network, dns, file, headless, cloud, javascript, ssl, code")
     s.add_argument("--limit", type=int, default=20)
     s.add_argument("--json", action="store_true")
 
     s = add("msf", cmd_msf, "search Metasploit modules")
-    s.add_argument("query")
+    s.add_argument("query", nargs="?")
     s.add_argument("--limit", type=int, default=30)
     s.add_argument("--json", action="store_true")
 
@@ -1533,7 +1554,7 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--json", action="store_true")
 
     s = add("attack", cmd_attack, "MITRE ATT&CK techniques")
-    s.add_argument("query")
+    s.add_argument("query", nargs="?")
     s.add_argument("--domain", choices=["enterprise", "mobile", "ics"])
     s.add_argument("--limit", type=int, default=10)
     s.add_argument("--json", action="store_true")
@@ -1570,7 +1591,7 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--json", action="store_true")
 
     s = add("bin", cmd_bin, "GTFOBins / LOLBAS / PayloadsAllTheThings")
-    s.add_argument("query")
+    s.add_argument("query", nargs="?")
     s.add_argument("--source", choices=["gtfobins", "lolbas", "payloads"])
     s.add_argument("--limit", type=int, default=25)
     s.add_argument("--json", action="store_true")
@@ -1606,7 +1627,8 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--json", action="store_true")
 
     add("where", cmd_where, "print paths").add_argument("--json", action="store_true")
-    add("doctor", cmd_doctor, "health check")
+    s = add("doctor", cmd_doctor, "health check")
+    s.add_argument("--json", action="store_true")
 
     s = add("sync", cmd_sync, "download datasets")
     s.add_argument("--tier", choices=datasets.TIER_NAMES,

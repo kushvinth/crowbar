@@ -361,7 +361,10 @@ def exploit_lookup(con: sqlite3.Connection, eid: str) -> dict:
     if not r:
         return {"id": eid, "error": "not_found"}
     out = dict(r)
-    out["fetch"] = f"crowbar exploit {eid}   # downloads the source locally (CLI only)"
+    local = [p for p in (paths.DATA / "exploitdb/full" / (r["file"] or ""),
+                         paths.DATA / "exploitdb/files" / (r["file"] or "")) if r["file"] and p.is_file()]
+    out["local_path"] = str(local[0]) if local else None
+    out["fetch"] = f"crowbar exploit {eid} --fetch   # downloads the source locally (CLI only)"
     return out
 
 
@@ -384,11 +387,14 @@ def exploit_fetch(con: sqlite3.Connection, eid: str) -> dict:
     return {**dict(e), "local_path": str(dest)}
 
 
-def nuclei_search(con: sqlite3.Connection, q: str, limit: int = 20,
+def nuclei_search(con: sqlite3.Connection, q: str | None = None, limit: int = 20,
                   domain: str | None = None) -> list[dict]:
-    sql = ("SELECT n.*, bm25(nuclei_fts) AS rank FROM nuclei_fts "
-           "JOIN nuclei n ON n.id=nuclei_fts.id WHERE nuclei_fts MATCH ?")
-    params: list = [fts_query(q)[0]]
+    if q:
+        sql = ("SELECT n.*, bm25(nuclei_fts) AS rank FROM nuclei_fts "
+               "JOIN nuclei n ON n.id=nuclei_fts.id WHERE nuclei_fts MATCH ?")
+        params: list = [fts_query(q)[0]]
+    else:   # browse by filter alone (e.g. --domain cloud)
+        sql, params = "SELECT n.*, n.id AS rank FROM nuclei n WHERE 1", []
     if domain:
         sql += " AND n.domain = ?"
         params.append(domain)
@@ -398,10 +404,10 @@ def nuclei_search(con: sqlite3.Connection, q: str, limit: int = 20,
             for r in con.execute(sql, params)]
 
 
-def msf_search(con: sqlite3.Connection, q: str, limit: int = 30) -> list[dict]:
+def msf_search(con: sqlite3.Connection, q: str | None = None, limit: int = 30) -> list[dict]:
     return [dict(r) for r in con.execute(
         "SELECT * FROM msf WHERE name LIKE ? ORDER BY type, name LIMIT ?",
-        (f"%{q}%", limit))]
+        (f"%{q or ''}%", limit))]
 
 
 def models_list(con: sqlite3.Connection, q: str | None = None, provider: str | None = None,
@@ -424,11 +430,11 @@ def models_list(con: sqlite3.Connection, q: str | None = None, provider: str | N
     return [dict(r) for r in con.execute(sql, params)]
 
 
-def attack_lookup(con: sqlite3.Connection, q: str, limit: int = 10,
+def attack_lookup(con: sqlite3.Connection, q: str | None = None, limit: int = 10,
                   domain: str | None = None) -> list[dict]:
     sql = ("SELECT * FROM attack WHERE (id LIKE ? OR name LIKE ? OR tactics LIKE ?"
            " OR description LIKE ?)")
-    params: list = [f"%{q}%"] * 4
+    params: list = [f"%{q or ''}%"] * 4
     if domain:
         sql += " AND domain = ?"
         params.append(domain)
@@ -530,9 +536,13 @@ def code_search(con: sqlite3.Connection, q: str, limit: int = 20) -> list[dict]:
             for r in con.execute(sql, (fts_query(q)[0], limit))]
 
 
-def toolkit_search(con: sqlite3.Connection, q: str, source: str | None = None,
+def toolkit_search(con: sqlite3.Connection, q: str | None = None, source: str | None = None,
                    limit: int = 25) -> list[dict]:
     """GTFOBins / LOLBAS / PayloadsAllTheThings."""
+    if not q:   # list by source alone
+        return [dict(r) for r in con.execute(
+            "SELECT source, name, path, description, tags FROM toolkit WHERE source = coalesce(?, source) "
+            "ORDER BY source, lower(name) LIMIT ?", (source, limit))]
     sql = ("SELECT t.source, t.name, t.path, t.description, t.tags "
            "FROM toolkit_fts f JOIN toolkit t ON t.source=f.source AND t.name=f.name "
            "WHERE toolkit_fts MATCH ?")

@@ -16,8 +16,8 @@ import xml.etree.ElementTree as ET
 import zipfile
 
 from . import chatter, db, intel, loaders, paths
+from .loaders import CVE_RE
 
-CVE_RE = re.compile(r"CVE-\d{4}-\d{4,7}", re.I)
 
 SCHEMA = """
 CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT);
@@ -232,9 +232,7 @@ def log(msg: str) -> None:
 
 
 def _norm(s: str | None, limit: int = 6000) -> str:
-    if not s:
-        return ""
-    return re.sub(r"\s+", " ", s).strip()[:limit]
+    return loaders.norm(s, limit)
 
 
 # ---------------------------------------------------------------- NVD
@@ -1031,14 +1029,8 @@ def _write_stats(stats: dict) -> None:
 
 def summarize() -> dict:
     con = sqlite3.connect(db.ro_uri(paths.DB), uri=True)
-    out = {}
-    for (t,) in con.execute("SELECT name FROM sqlite_master WHERE type='table' "
-                            "AND name NOT LIKE '%_fts%' AND name NOT LIKE 'sqlite_%'"):
-        out[t] = con.execute(f"SELECT count(*) FROM {t}").fetchone()[0]
-    try:
-        out["meta"] = {k: v for k, v in con.execute("SELECT key, value FROM meta")}
-    except sqlite3.DatabaseError:
-        out["meta"] = {}
+    out = db.counts(con)
+    out["meta"] = db.meta(con)
     con.close()
     out["db_bytes"] = paths.DB.stat().st_size
     return out
