@@ -23,6 +23,13 @@ repos:
         files: ^(crowbar|tests)/
         pass_filenames: false
 
+      - id: crowbar-paths
+        name: crowbar write/read path tests
+        entry: sh -c 'python3 -m tests.test_r1_write && python3 -m tests.test_r1_read'
+        language: system
+        files: ^(crowbar|tests)/
+        pass_filenames: false
+
       - id: crowbar-corpus
         name: crowbar corpus tests (skipped if index/crowbar.db is absent)
         entry: python3 -m tests.test_corpus

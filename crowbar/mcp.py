@@ -5,6 +5,7 @@ from crowbar import __version__
 
 import json
 import os
+import sqlite3
 import sys
 import time
 import traceback
@@ -331,6 +332,7 @@ def respond(msg_id, result=None, error=None) -> None:
     sys.stdout.flush()
 
 
+
 def handle(req: dict) -> None:
     method, rid = req.get("method"), req.get("id")
     if method == "initialize":
@@ -366,9 +368,16 @@ def handle(req: dict) -> None:
         except BadArgs as exc:
             respond(rid, error={"code": -32602, "message": str(exc)})
             return
-        con = db.connect()
         try:
+            con = connection()
+            err = db.schema_error(con)
+            if err:   # wrong or damaged index: reopen on the next call
+                close_connection()
+                respond(rid, {"content": [{"type": "text", "text": err}], "isError": True})
+                return
             result = tool["fn"](con, args)
+            if tool["name"] == "cb_sql" and args["query"].lstrip().lower().startswith("pragma"):
+                close_connection()   # a PRAGMA would otherwise stick for every later call
             text, over = fit_response(result)
             content = [{"type": "text", "text": text}]
             warn = check_freshness()
@@ -376,17 +385,41 @@ def handle(req: dict) -> None:
                 content.append({"type": "text", "text": warn})
             respond(rid, {"content": content, "isError": over})
         except Exception as exc:  # noqa: BLE001
+            if isinstance(exc, sqlite3.DatabaseError):
+                close_connection()   # next call reopens (file swapped or damaged under us)
             # Full detail (incl. filesystem paths) to stderr only; the client
             # gets the exception type and a root-redacted message.
             print(f"crowbar tool {tool['name']} failed:\n{traceback.format_exc()}",
                   file=sys.stderr)
             msg = f"{type(exc).__name__}: {exc}".replace(str(paths.ROOT), "<root>")
             respond(rid, {"content": [{"type": "text", "text": msg}], "isError": True})
-        finally:
-            con.close()
         return
     if rid is not None:
         respond(rid, error={"code": -32601, "message": f"method not found: {method}"})
+
+
+_con: list = [None, None]   # connection, (inode, mtime_ns) of the file it opened
+
+
+def connection() -> sqlite3.Connection:
+    """One read-only connection for the server's lifetime, reopened when the index
+    file changed underneath it: `update` swaps the file (new inode) or rewrites it
+    in place (same inode, new mtime)."""
+    try:
+        st = paths.DB.stat()
+        key = (st.st_ino, st.st_mtime_ns)
+    except OSError:
+        key = None
+    if _con[0] is None or _con[1] != key:
+        close_connection()
+        _con[0], _con[1] = db.connect(), key
+    return _con[0]
+
+
+def close_connection() -> None:
+    if _con[0] is not None:
+        _con[0].close()
+    _con[0] = None
 
 
 _checked = [0.0]

@@ -156,10 +156,9 @@ def connect_or_die():
         con = db.connect()
     except db.NotIndexed as exc:
         die(f"{exc}")
-    if db.schema_version(con) != paths.SCHEMA_VERSION:
-        old = db.schema_version(con) < paths.SCHEMA_VERSION   # update() migrates older schemas in place
-        die(f"index schema v{db.schema_version(con)} != v{paths.SCHEMA_VERSION} - run: crowbar "
-            f"{'update' if old else 'build'}")
+    err = db.schema_error(con)
+    if err:
+        die(err)
     if datasets.refresh_in_background(datasets.index_status(db.meta(con))):
         print(f"{DIM}↻ index is over a day old - refreshing in the background{RST}", file=sys.stderr)
     return con
@@ -715,11 +714,14 @@ def cmd_bench(args) -> None:
     cid = (kev and kev[0]) or (some and some[0]) or "CVE-2021-44228"
     cases = (("cve lookup", lambda: query.get_cve(con, cid)),
              ("full-text search", lambda: query.search(con, "remote code execution", limit=20)),
+             ("broad search", lambda: query.search(con, "vuln", limit=20)),
+             ("search --cwe", lambda: query.search(con, cwe="CWE-79", limit=20)),
              ("product + version", lambda: query.products(con, "nginx", "1.18.0")),
              ("KEV list", lambda: query.kev_list(con, None, 25)),
              ("trending", lambda: query.trending(con)),
              ("new this week", lambda: query.new_since(con)),
-             ("package advisory", lambda: query.advisory_search(con, package="lodash", ecosystem="npm")))
+             ("package advisory", lambda: query.advisory_search(con, package="lodash", ecosystem="npm")),
+             ("stats", lambda: query.stats(con)))
     results = []
     for name, fn in cases:
         times = []
@@ -894,15 +896,23 @@ def cmd_update(args) -> None:
 def _update(args, indexer) -> None:
     status = datasets.index_status()
     tier = status["tier"]
-    if status["stale"] and args.no_sync:
+    try:
+        con = db.connect()
+    except db.NotIndexed:
+        rebuild = None
+    else:
+        rebuild = db.schema_error(con)   # another schema cannot be updated in place
+        con.close()
+    if status["stale"] and args.no_sync and not rebuild:
         print(f"{YEL}index is {status['age_days']} days old: past the 8-day NVD change feed, "
               f"so CVEs changed in the gap stay stale until a run without --no-sync{RST}", file=sys.stderr)
-    elif status["stale"]:
+    elif status["stale"] or rebuild:
         # the modified feed only reaches back 8 days: re-sync and rebuild to close the gap
         ns = argparse.Namespace(tier=tier, years=None, only=None, force=False, jobs=args.jobs,
                                 pull=False, allow_incomplete=True, quick=False, extra=args.extra,
                                 bulk=False, json=args.json)
-        cmd_sync(ns)
+        if not args.no_sync:
+            cmd_sync(ns)
         cmd_build(ns)
         return
     groups = ["nvd", "kev", "epss", "exploitdb", "models", "cveorg", "poc", "chatter"]
@@ -944,9 +954,8 @@ def cmd_doctor(args) -> None:
         r["integrity"] = con.execute("PRAGMA quick_check").fetchone()[0]
         s = query.stats(con)
         r["counts"] = {k: s.get(k, 0) for k in ("cve", "cve_kev", "cve_with_exploit", "cpe_match")}
-        if r["schema"] != paths.SCHEMA_VERSION:
-            r["problems"].append(f"schema v{r['schema']} != v{paths.SCHEMA_VERSION} - run: crowbar "
-                                 f"{'update' if r['schema'] < paths.SCHEMA_VERSION else 'build'}")
+        if db.schema_error(con):
+            r["problems"].append(db.schema_error(con))
         if r["integrity"] != "ok":
             r["problems"].append(f"integrity: {r['integrity']}")
     else:

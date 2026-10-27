@@ -162,6 +162,13 @@ class TestQuery(unittest.TestCase):
         rows = query.search(CON, "", product="nginx")
         self.assertEqual([r["id"] for r in rows], ["CVE-2023-1111"])
 
+    def test_search_fts_with_filters(self):
+        # filters apply after the FTS top-N subquery; "cve" matches every fixture row
+        self.assertEqual({r["id"] for r in query.search(CON, "cve", kev=True)},
+                         {"CVE-2021-44228", "CVE-2017-0144"})
+        self.assertEqual([r["id"] for r in query.search(CON, "", cwe="cwe-787")], ["CVE-2023-1111"])
+        self.assertEqual([r["id"] for r in query.search(CON, "cve", cwe="CWE-502")], ["CVE-2021-44228"])
+
     def test_get_cve_full(self):
         c = query.get_cve(CON, "2021-44228")
         self.assertEqual(c["id"], "CVE-2021-44228")
@@ -615,6 +622,7 @@ class TestFreshness(unittest.TestCase):
         con = sqlite3.connect(paths.DB)
         con.execute("CREATE TABLE IF NOT EXISTS meta(key PRIMARY KEY, value)")
         con.execute("INSERT OR REPLACE INTO meta VALUES ('updated_at', ?)", (ts,))
+        con.execute("INSERT OR REPLACE INTO meta VALUES ('schema', ?)", (str(paths.SCHEMA_VERSION),))
         con.commit()
         con.close()
 
@@ -778,6 +786,99 @@ class TestOptionalSources(unittest.TestCase):
             cli.cmd_sync(args)   # no SystemExit
         self.assertFalse(any(d.name == "hn" for d in datasets.tier_plan("lite")
                              if not d.optional))
+
+
+class TestFtsRowid(unittest.TestCase):
+    """cve_fts.rowid = fts_rowid(id), so delete_cves drops FTS rows by rowid, not a scan."""
+
+    def setUp(self):
+        import gzip
+        import shutil
+        import tempfile
+        tmp = pathlib.Path(tempfile.mkdtemp(prefix="cb-fts-"))
+        self.db = tmp / "c.db"
+        shutil.copy(DB, self.db)
+        self.feed = tmp / "nvdcve-2.0-modified.json.gz"
+
+        def item(cid, desc):
+            return {"cve": {"id": cid, "published": "2026-10-01T00:00:00", "vulnStatus": "Modified",
+                            "descriptions": [{"lang": "en", "value": desc}],
+                            "configurations": [{"nodes": [{"cpeMatch": [{
+                                "vulnerable": True, "criteria": "cpe:2.3:a:apache:log4j:*:*:*:*:*:*:*:*",
+                                "versionEndExcluding": "2.15.0"}]}]}]}}
+        doc = {"vulnerabilities": [item("CVE-2021-44228", "Log4Shell re-sent by NVD"),
+                                   item("CVE-2026-9999", "brand new widget overflow"),
+                                   item("CVE-2026-9999", "listed twice in one feed")]}
+        with gzip.open(self.feed, "wt") as fh:
+            json.dump(doc, fh)
+
+    def aligned(self, con):
+        n = con.execute("SELECT count(*) FROM cve").fetchone()[0]
+        self.assertEqual(con.execute("SELECT count(*) FROM cve_fts").fetchone()[0], n)
+        from crowbar.indexer import FTS_ROWID_SQL
+        self.assertEqual(con.execute("SELECT count(*) FROM cve c JOIN cve_fts f "
+                                     f"ON f.rowid={FTS_ROWID_SQL.replace('id', 'c.id')} "
+                                     "WHERE f.id=c.id").fetchone()[0], n)
+
+    def test_load_nvd_replace_keeps_rowids_aligned(self):
+        from crowbar import indexer
+        con = sqlite3.connect(self.db)
+        indexer.load_nvd(self.feed, con, {}, set(), replace=True)
+        self.aligned(con)
+        self.assertEqual(con.execute("SELECT id FROM cve_fts WHERE cve_fts MATCH 'Log4Shell'")
+                         .fetchone()[0], "CVE-2021-44228")
+        # absent bounds are '' (cpe_match key columns are NOT NULL)
+        self.assertEqual(con.execute("SELECT v_start_incl, v_end_excl FROM cpe_match "
+                                     "WHERE cve_id='CVE-2026-9999'").fetchone(), ("", "2.15.0"))
+        con.execute("VACUUM")   # the build ends with VACUUM: rowids must survive it
+        self.aligned(con)
+        con.close()
+
+    def test_delete_cves_drops_fts_rows_by_rowid(self):
+        from crowbar import indexer
+        con = sqlite3.connect(self.db)
+        plan = " ".join(r[-1] for r in con.execute(
+            "EXPLAIN QUERY PLAN DELETE FROM cve_fts WHERE rowid IN (?)",
+            (indexer.fts_rowid("CVE-2017-0144"),)))
+        self.assertIn("VIRTUAL TABLE INDEX 0:=", plan)   # FTS5 rowid lookup; a scan is "INDEX 0:"
+        indexer.delete_cves(con, ["CVE-2017-0144", "CVE-2023-1111"])
+        self.assertEqual(con.execute("SELECT count(*) FROM cve_fts WHERE id IN "
+                                     "('CVE-2017-0144','CVE-2023-1111')").fetchone()[0], 0)
+        self.aligned(con)
+        con.close()
+
+    def test_v3_index_asks_for_a_rebuild(self):
+        from unittest import mock
+        from crowbar import indexer
+        con = sqlite3.connect(self.db)
+        con.execute("UPDATE meta SET value='3' WHERE key='schema'")
+        con.commit()
+        self.assertIn("run: crowbar build", db.schema_error(con))
+        con.close()
+        with mock.patch.object(paths, "DB", self.db), \
+                self.assertRaisesRegex(ValueError, "v3 needs a rebuild: run crowbar build"):
+            indexer.update()
+        self.assertFalse(self.db.with_suffix(".db.tmp").exists())
+
+    def test_v3_index_doctor_and_update_point_to_build(self):
+        import argparse
+        from unittest import mock
+        from crowbar import cli, datasets, indexer
+        home, dbf = support.make_fixture_home()
+        con = sqlite3.connect(dbf)
+        con.execute("UPDATE meta SET value='3' WHERE key='schema'")
+        con.commit()
+        con.close()
+        doc = json.loads(support.run_hv("doctor", "--json", home=str(home)).stdout)
+        self.assertIn(f"index schema v3 != v{paths.SCHEMA_VERSION} - run: crowbar build", doc["problems"])
+        args = argparse.Namespace(no_sync=True, jobs=1, extra=False, json=False)
+        status = {"tier": None, "stale": False, "age_days": 2}
+        with mock.patch.object(paths, "DB", dbf), \
+                mock.patch.object(datasets, "index_status", return_value=status), \
+                mock.patch.object(cli, "cmd_sync") as sync, mock.patch.object(cli, "cmd_build") as build:
+            cli._update(args, indexer)   # rebuilds instead of failing after a sync
+        build.assert_called_once()
+        sync.assert_not_called()
 
 
 class TestUpdateKeepsLinks(unittest.TestCase):

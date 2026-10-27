@@ -33,12 +33,13 @@ def vkey(v: str):
     return out
 
 
-def version_affected(row: sqlite3.Row, version: str) -> bool:
+def version_affected(row: sqlite3.Row, version: str, v: list | None = None) -> bool:
+    """`v` is vkey(version), precomputed by callers that test many rows."""
     ver = (row["version"] or "").strip()
     if ver not in ("*", "-", ""):
         return ver.lower() == version.lower()
     try:
-        v = vkey(version)
+        v = vkey(version) if v is None else v
         if row["v_start_incl"] and v < vkey(row["v_start_incl"]):
             return False
         if row["v_start_excl"] and v <= vkey(row["v_start_excl"]):
@@ -82,13 +83,11 @@ def search(con: sqlite3.Connection, query: str = "", *, limit: int = 20,
            cwe: str | None = None, product: str | None = None,
            vendor: str | None = None, ssvc: str | None = None,
            poc: bool = False) -> list[dict]:
-    where, params = [], []
+    where, params = [], []   # non-FTS filters; the MATCH is added per query shape below
     use_fts = bool(query)
     toks: list[str] = []
     if use_fts:
         fq, toks = fts_query(query)
-        where.append("cve_fts MATCH ?")
-        params.append(fq)
     if severity:
         sevs = [s.upper() for s in severity.split(",")]
         where.append(f"c.severity IN ({','.join('?' * len(sevs))})")
@@ -110,7 +109,7 @@ def search(con: sqlite3.Connection, query: str = "", *, limit: int = 20,
         where.append("c.cvss >= ?")
         params.append(cvss)
     if cwe:
-        where.append("EXISTS(SELECT 1 FROM cve_cwe w WHERE w.cve_id=c.id AND w.cwe=?)")
+        where.append("c.id IN (SELECT cve_id FROM cve_cwe WHERE cwe = ?)")
         params.append(cwe.upper())
     if product:
         where.append("c.id IN (SELECT cve_id FROM cve_product WHERE product GLOB ?)")
@@ -119,32 +118,30 @@ def search(con: sqlite3.Connection, query: str = "", *, limit: int = 20,
         where.append("c.id IN (SELECT cve_id FROM cve_product WHERE vendor GLOB ?)")
         params.append(_prefix(vendor))
     if ssvc:
-        where.append("EXISTS(SELECT 1 FROM ssvc s WHERE s.cve_id=c.id AND s.exploitation=?)")
+        where.append("c.id IN (SELECT cve_id FROM ssvc WHERE exploitation = ?)")
         params.append(ssvc)
     if poc:
-        where.append("EXISTS(SELECT 1 FROM poc p WHERE p.cve_id=c.id)")
+        where.append("c.id IN (SELECT cve_id FROM poc)")
 
-    sql_where = (" WHERE " + " AND ".join(where)) if where else ""
-    base = "FROM cve_fts JOIN cve c ON c.id = cve_fts.id" if use_fts else "FROM cve c"
     sel = ("SELECT c.*, (SELECT count(*) FROM cve_exploit x WHERE x.cve_id=c.id) AS exploits,"
            " (SELECT count(*) FROM cve_nuclei n WHERE n.cve_id=c.id) AS nuclei_count,"
-           " (SELECT coalesce(poc_count,0) FROM cve_meta m WHERE m.cve_id=c.id) AS poc_count"
-           + (", bm25(cve_fts) AS rank" if use_fts else ""))
-    sql = f"{sel} {base}{sql_where}"
-    order = {
-        "relevance": "ORDER BY c.kev DESC, c.epss DESC",
-        "newest": "ORDER BY c.published DESC",
-        "oldest": "ORDER BY c.published ASC",
-        "cvss": "ORDER BY c.cvss DESC",
-        "epss": "ORDER BY c.epss DESC",
-    }[sort]
+           " (SELECT coalesce(poc_count,0) FROM cve_meta m WHERE m.cve_id=c.id) AS poc_count")
 
     if use_fts and sort == "relevance":
         pool = min(max(300, (offset + limit) * 8), 2000)
-        rows = con.execute(sql + " ORDER BY rank LIMIT ?", [*params, pool]).fetchall()
+        if where:
+            # a filter must see every match (a KEV row rarely ranks in the bm25 top-N)
+            sql = (f"{sel}, bm25(cve_fts) AS rank FROM cve_fts JOIN cve c ON c.id = cve_fts.id"
+                   " WHERE cve_fts MATCH ? AND " + " AND ".join(where) + " ORDER BY rank LIMIT ?")
+            args = lambda q: [q, *params, pool]  # noqa: E731
+        else:
+            # FTS top-N first, so the count subqueries run per kept row, not per match
+            sql = (f"{sel}, f.rank FROM (SELECT id, bm25(cve_fts) AS rank FROM cve_fts"
+                   " WHERE cve_fts MATCH ? ORDER BY rank LIMIT ?) f JOIN cve c ON c.id = f.id")
+            args = lambda q: [q, pool]  # noqa: E731
+        rows = con.execute(sql, args(fq)).fetchall()
         if not rows and len(toks) > 1:
-            params[0] = f'"{max(toks, key=len)}"*'
-            rows = con.execute(sql + " ORDER BY rank LIMIT ?", [*params, pool]).fetchall()
+            rows = con.execute(sql, args(f'"{max(toks, key=len)}"*')).fetchall()
         if rows:
             top = max(abs(r["rank"]) for r in rows) or 1.0
             scored = [(10.0 * abs(r["rank"]) / top + 4.0 * r["kev"]
@@ -154,6 +151,18 @@ def search(con: sqlite3.Connection, query: str = "", *, limit: int = 20,
             scored.sort(key=lambda pair: -pair[0])
             rows = [r for _, r in scored][offset:offset + limit]
     else:
+        if use_fts:
+            where.insert(0, "cve_fts MATCH ?")
+            params.insert(0, fq)
+        base = "FROM cve_fts JOIN cve c ON c.id = cve_fts.id" if use_fts else "FROM cve c"
+        sql = f"{sel} {base}" + (" WHERE " + " AND ".join(where) if where else "")
+        order = {
+            "relevance": "ORDER BY c.kev DESC, c.epss DESC",
+            "newest": "ORDER BY c.published DESC",
+            "oldest": "ORDER BY c.published ASC",
+            "cvss": "ORDER BY c.cvss DESC",
+            "epss": "ORDER BY c.epss DESC",
+        }[sort]
         rows = con.execute(sql + f" {order} LIMIT ? OFFSET ?",
                            [*params, limit, offset]).fetchall()
         if not rows and use_fts and len(toks) > 1 and offset == 0:
@@ -206,7 +215,9 @@ def get_cve(con: sqlite3.Connection, cid: str) -> dict:
         (cid, CVE_ARRAY_CAP))]
     out["affects_total"] = con.execute(
         "SELECT count(*) FROM cpe_match WHERE cve_id=?", (cid,)).fetchone()[0]
-    out["affects"] = [{**dict(x), "label": range_label(x)} for x in con.execute(
+    bounds = ("v_start_incl", "v_start_excl", "v_end_incl", "v_end_excl")   # stored '' (NOT NULL key)
+    out["affects"] = [{**dict(x), **{k: x[k] or None for k in bounds}, "label": range_label(x)}
+                      for x in con.execute(
         "SELECT * FROM cpe_match WHERE cve_id=? ORDER BY vendor, product, version LIMIT ?",
         (cid, CVE_ARRAY_CAP))]
     out["references_total"] = con.execute(
@@ -320,8 +331,12 @@ def products(con: sqlite3.Connection, name: str, version: str | None = None,
         rows = con.execute(sel + "product LIKE ? OR vendor LIKE ? LIMIT 20000",
                            (f"%{n}%", f"%{n}%")).fetchall()
     hits: dict[str, list[sqlite3.Row]] = {}
+    try:
+        v = vkey(version) if version else None
+    except ValueError:   # e.g. "²".isdigit(); version_affected then rejects range rows itself
+        v = None
     for r in rows:
-        if not version or version_affected(r, version):
+        if not version or version_affected(r, version, v):
             hits.setdefault(r["cve_id"], []).append(r)
     out = []
     for c in con.execute(
@@ -611,18 +626,11 @@ def stats(con: sqlite3.Connection) -> dict:
         counts = {k: v for k, v in cached.items() if isinstance(v, int) and k not in ("db_bytes", "rows_touched")}
     else:
         counts = db.counts(con)
-    try:
-        counts["cve_with_epss"] = con.execute(
-            "SELECT count(*) FROM cve WHERE epss IS NOT NULL").fetchone()[0]
-        counts["cve_kev"] = con.execute("SELECT count(*) FROM cve WHERE kev=1").fetchone()[0]
-        counts["cve_with_exploit"] = con.execute(
-            "SELECT count(*) FROM cve WHERE has_exploit=1").fetchone()[0]
-        counts["cve_with_nuclei"] = con.execute(
-            "SELECT count(*) FROM cve WHERE has_nuclei=1").fetchone()[0]
-        counts["cve_with_msf"] = con.execute(
-            "SELECT count(*) FROM cve WHERE has_msf=1").fetchone()[0]
-    except sqlite3.DatabaseError:
-        pass
+    if not all(k in counts for k in db.CVE_FLAGS):
+        try:
+            counts.update(db.flag_counts(con))
+        except sqlite3.DatabaseError:
+            pass
     counts["db_bytes"] = paths.DB.stat().st_size if paths.DB.exists() else 0
     counts["meta"] = meta
     counts["freshness"] = datasets.freshness()

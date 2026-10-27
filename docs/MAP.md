@@ -49,7 +49,7 @@ upstream feed / git repo
 data/<group>/…                     raw files, never modified
         │  crowbar build / crowbar update    (indexer.py → loaders.py)
         ▼
-index/crowbar.db                        SQLite, schema v3 (row counts below are a full-corpus snapshot; crowbar stats is authoritative)
+index/crowbar.db                        SQLite, schema v4 (row counts below are a full-corpus snapshot; crowbar stats is authoritative)
         │  query.py
         ├── bin/crowbar …               CLI
         └── mcp/server.py          MCP tools

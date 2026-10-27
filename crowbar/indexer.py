@@ -7,7 +7,6 @@ import json
 import os
 import pathlib
 import re
-import shutil
 import sqlite3
 import subprocess
 import sys
@@ -31,23 +30,22 @@ CREATE TABLE cve(
   has_exploit INTEGER DEFAULT 0, has_nuclei INTEGER DEFAULT 0, has_msf INTEGER DEFAULT 0,
   year INTEGER
 );
-CREATE TABLE cve_cwe(cve_id TEXT, cwe TEXT);
-CREATE UNIQUE INDEX cve_cwe_unique ON cve_cwe(cve_id, cwe);
-CREATE TABLE cve_product(cve_id TEXT, vendor TEXT, product TEXT);
-CREATE UNIQUE INDEX cve_product_unique ON cve_product(cve_id, vendor, product);
+-- Link tables are WITHOUT ROWID: the primary key is the table, not a second copy.
+CREATE TABLE cve_cwe(cve_id TEXT, cwe TEXT, PRIMARY KEY(cve_id, cwe)) WITHOUT ROWID;
+CREATE TABLE cve_product(
+  cve_id TEXT, vendor TEXT, product TEXT, PRIMARY KEY(cve_id, vendor, product)
+) WITHOUT ROWID;
+-- WITHOUT ROWID key columns are NOT NULL, so an absent version bound is ''.
 CREATE TABLE cpe_match(
   cve_id TEXT, part TEXT, vendor TEXT, product TEXT, version TEXT,
-  v_start_incl TEXT, v_start_excl TEXT, v_end_incl TEXT, v_end_excl TEXT
-);
-CREATE UNIQUE INDEX cpe_match_unique ON cpe_match(
-  cve_id, part, vendor, product, version,
-  v_start_incl, v_start_excl, v_end_incl, v_end_excl
-);
-CREATE TABLE cve_ref(cve_id TEXT, url TEXT, tags TEXT);
-CREATE UNIQUE INDEX cve_ref_unique ON cve_ref(cve_id, url);
-CREATE TABLE cve_exploit(cve_id TEXT, exploit_id TEXT, PRIMARY KEY(cve_id, exploit_id));
-CREATE TABLE cve_nuclei(cve_id TEXT, template_id TEXT, PRIMARY KEY(cve_id, template_id));
-CREATE TABLE cve_msf(cve_id TEXT, module_path TEXT, PRIMARY KEY(cve_id, module_path));
+  v_start_incl TEXT, v_start_excl TEXT, v_end_incl TEXT, v_end_excl TEXT,
+  PRIMARY KEY(cve_id, part, vendor, product, version,
+              v_start_incl, v_start_excl, v_end_incl, v_end_excl)
+) WITHOUT ROWID;
+CREATE TABLE cve_ref(cve_id TEXT, url TEXT, tags TEXT, PRIMARY KEY(cve_id, url)) WITHOUT ROWID;
+CREATE TABLE cve_exploit(cve_id TEXT, exploit_id TEXT, PRIMARY KEY(cve_id, exploit_id)) WITHOUT ROWID;
+CREATE TABLE cve_nuclei(cve_id TEXT, template_id TEXT, PRIMARY KEY(cve_id, template_id)) WITHOUT ROWID;
+CREATE TABLE cve_msf(cve_id TEXT, module_path TEXT, PRIMARY KEY(cve_id, module_path)) WITHOUT ROWID;
 
 CREATE TABLE kev(
   cve TEXT PRIMARY KEY, vendor TEXT, product TEXT, name TEXT,
@@ -123,11 +121,11 @@ CREATE TABLE cve_cna(
 CREATE TABLE cve_cna_ref(
   cve_id TEXT, url TEXT, tags TEXT,
   PRIMARY KEY(cve_id, url)
-);
+) WITHOUT ROWID;
 CREATE TABLE cve_cna_product(
   cve_id TEXT, vendor TEXT, product TEXT,
   PRIMARY KEY(cve_id, vendor, product)
-);
+) WITHOUT ROWID;
 CREATE TABLE cve_meta(
   cve_id TEXT PRIMARY KEY,
   published_year INTEGER, cve_year INTEGER,
@@ -143,14 +141,16 @@ CREATE TABLE poc_orphan(cve_id TEXT PRIMARY KEY, count INTEGER);
 CREATE TABLE cve_alias(
   cve_id TEXT, alias TEXT, source TEXT,
   PRIMARY KEY(cve_id, alias, source)
-);
+) WITHOUT ROWID;
 CREATE TABLE source_state(
   source TEXT PRIMARY KEY, url TEXT, path TEXT, license TEXT, sha256 TEXT,
   fetched_at TEXT, loaded_at TEXT, record_count INTEGER, status TEXT, note TEXT
 );
 
+-- cve_fts.rowid = fts_rowid(id): deletes are rowid lookups (filtering the UNINDEXED id scans).
+-- detail stays full: fts_query emits phrases ("1.18.0"*, "ms17_010"*) that detail=none/column reject.
 CREATE VIRTUAL TABLE cve_fts USING fts5(
-  id UNINDEXED, description, products, tokenize='porter unicode61'
+  id UNINDEXED, description, products, tokenize='porter unicode61', prefix='4 5 6'
 );
 CREATE VIRTUAL TABLE exploit_fts USING fts5(
   id UNINDEXED, description, tags, codes, tokenize='porter unicode61'
@@ -225,6 +225,14 @@ DROP INDEX IF EXISTS source_state_status;
 """
 
 BATCH = 800
+# cve_fts.id is UNINDEXED: rows are addressed by a rowid derived from the CVE id instead
+FTS_ROWID_SQL = "CAST(substr(id,5,4) AS INTEGER)*100000000 + CAST(substr(id,10) AS INTEGER)"
+
+
+def fts_rowid(cid: str) -> int:
+    """CVE-YYYY-N -> YYYY*1e8+N, the cve_fts rowid (same formula as FTS_ROWID_SQL)."""
+    # shortcut: assumes a sequence below 1e8 (CVE ids have 4-7 digits today); widen the multiplier if that changes
+    return int(cid[4:8]) * 100_000_000 + int(cid[9:])
 
 
 def log(msg: str) -> None:
@@ -251,8 +259,8 @@ def cpe_rows(cve: dict, cap: int = 400) -> list[tuple]:
                 if vendor in ("*", "-") or product in ("*", "-"):
                     continue
                 row = (parts[2], vendor, product, parts[5],
-                       m.get("versionStartIncluding"), m.get("versionStartExcluding"),
-                       m.get("versionEndIncluding"), m.get("versionEndExcluding"))
+                       m.get("versionStartIncluding") or "", m.get("versionStartExcluding") or "",
+                       m.get("versionEndIncluding") or "", m.get("versionEndExcluding") or "")
                 if row in seen:
                     continue
                 seen.add(row)
@@ -326,12 +334,38 @@ def parse_cve(item: dict, epss: dict, kev_ids: set[str]) -> dict:
 
 
 def delete_cves(con: sqlite3.Connection, ids: list[str]) -> None:
+    # an index built before fts_rowid (see migrate_fts_rowids) still addresses cve_fts by id
+    by_rowid = con.execute("SELECT 1 FROM meta WHERE key='fts_rowid'").fetchone() is not None
     for i in range(0, len(ids), BATCH):
         chunk = ids[i:i + BATCH]
         q = ",".join("?" * len(chunk))
         # cve_exploit/cve_nuclei/cve_msf come from other sources; an NVD re-load keeps them
-        for table in ("cve_cwe", "cve_product", "cpe_match", "cve_ref", "cve_fts", "cve"):
-            con.execute(f"DELETE FROM {table} WHERE {'id' if table == 'cve' else 'cve_id' if table != 'cve_fts' else 'id'} IN ({q})", chunk)
+        for table in ("cve_cwe", "cve_product", "cpe_match", "cve_ref"):
+            con.execute(f"DELETE FROM {table} WHERE cve_id IN ({q})", chunk)
+        con.execute(f"DELETE FROM cve WHERE id IN ({q})", chunk)
+        if by_rowid:
+            con.execute(f"DELETE FROM cve_fts WHERE rowid IN ({q})", [fts_rowid(c) for c in chunk])
+        else:
+            con.execute(f"DELETE FROM cve_fts WHERE id IN ({q})", chunk)
+
+
+def migrate_fts_rowids(con: sqlite3.Connection) -> bool:
+    """One-off renumber of cve_fts so delete_cves can address rows by rowid."""
+    if con.execute("SELECT 1 FROM meta WHERE key='fts_rowid'").fetchone() is not None:
+        return False
+    # bare columns follow max(rowid): a duplicated id keeps its newest row
+    con.execute("CREATE TEMP TABLE _fts_tmp AS SELECT id, description, products, max(rowid) "
+                "FROM cve_fts GROUP BY id")
+    # FTS5 has no fast truncate for a content-bearing table: drop and recreate it
+    ddl = con.execute("SELECT sql FROM sqlite_master WHERE name='cve_fts'").fetchone()[0]
+    con.execute("DROP TABLE cve_fts")
+    con.execute(ddl)
+    con.execute("INSERT OR REPLACE INTO cve_fts(rowid, id, description, products) "
+                f"SELECT {FTS_ROWID_SQL}, id, description, products FROM _fts_tmp")
+    con.execute("DROP TABLE _fts_tmp")
+    con.execute("INSERT OR REPLACE INTO meta VALUES ('fts_rowid', '1')")
+    con.commit()
+    return True
 
 
 def load_nvd(path: pathlib.Path, con: sqlite3.Connection, epss: dict,
@@ -382,7 +416,8 @@ def _flush(con, rows, cwes, prods, cpes, refs, fts) -> None:
     if refs:
         con.executemany("INSERT OR IGNORE INTO cve_ref VALUES (?,?,?)", refs)
     if fts:
-        con.executemany("INSERT INTO cve_fts(id, description, products) VALUES (?,?,?)", fts)
+        con.executemany("INSERT OR REPLACE INTO cve_fts(rowid, id, description, products) "
+                        "VALUES (?,?,?,?)", [(fts_rowid(r[0]), *r) for r in fts])
 
 
 # ---------------------------------------------------------------- intel
@@ -436,7 +471,9 @@ def apply_epss(con: sqlite3.Connection, epss: dict) -> int:
     con.execute("DELETE FROM _epss_tmp")
     con.executemany("INSERT OR REPLACE INTO _epss_tmp VALUES (?,?,?)",
                     [(k, v[0], v[1]) for k, v in epss.items()])
-    con.execute("UPDATE cve SET epss=t.epss, epss_pct=t.pct FROM _epss_tmp t WHERE t.cve=cve.id")
+    # only rows whose score moved, so a daily update does not rewrite every cve page
+    con.execute("UPDATE cve SET epss=t.epss, epss_pct=t.pct FROM _epss_tmp t WHERE t.cve=cve.id "
+                "AND (cve.epss IS NOT t.epss OR cve.epss_pct IS NOT t.pct)")
     con.execute("DROP TABLE _epss_tmp")
     return len(epss)
 
@@ -769,25 +806,55 @@ def create(path: pathlib.Path) -> sqlite3.Connection:
     return con
 
 
-def finish(con: sqlite3.Connection) -> None:
-    """Indexes, planner stats and merged FTS segments: run before every swap."""
+def finish(con: sqlite3.Connection, optimize: bool = False) -> None:
+    """Indexes and planner stats before every swap; FTS optimize (a full rewrite) only on build."""
     con.executescript(INDEXES)
-    for fts in ("cve_fts", "exploit_fts", "exploit_code_fts", "nuclei_fts"):
+    for fts in ("cve_fts", "exploit_fts", "exploit_code_fts", "nuclei_fts") if optimize else ():
         con.execute(f"INSERT INTO {fts}({fts}) VALUES('optimize')")
     con.execute("PRAGMA analysis_limit=1000")
     con.execute("ANALYZE")
     con.commit()
 
 
-def _clone(src: pathlib.Path, dst: pathlib.Path) -> None:
-    """Copy-on-write clone (APFS, btrfs, XFS) is instant; plain copy elsewhere (exFAT USB)."""
-    flag = "-c" if sys.platform == "darwin" else "--reflink=auto"
+def _clone(src: pathlib.Path, dst: pathlib.Path) -> bool:
+    """Copy-on-write clone (APFS, btrfs, XFS): instant and free. False where the filesystem
+    cannot clone (exFAT USB, Windows); update() then works on the live DB instead."""
     try:
-        if subprocess.run(["cp", flag, str(src), str(dst)], capture_output=True).returncode == 0:
-            return
-    except OSError:   # no cp (Windows)
+        if sys.platform == "darwin":   # cp -c silently falls back to a full copy: ask clonefile(2)
+            import ctypes
+            ok = ctypes.CDLL(None).clonefile(os.fsencode(src), os.fsencode(dst), 0) == 0
+        else:
+            ok = subprocess.run(["cp", "--reflink=always", str(src), str(dst)],
+                                capture_output=True).returncode == 0
+    except (OSError, AttributeError):   # no cp (Windows), no clonefile
+        ok = False
+    if not ok:
+        dst.unlink(missing_ok=True)
+    return ok
+
+
+class _OneTxn:
+    """Routes a loader's calls into one open transaction: commit() waits for the end and
+    executescript() (an implicit COMMIT in sqlite3) runs its statements one by one."""
+
+    def __init__(self, con: sqlite3.Connection):
+        self._con = con
+
+    def __getattr__(self, name):
+        return getattr(self._con, name)
+
+    def commit(self) -> None:
         pass
-    shutil.copy2(src, dst)
+
+    def executescript(self, script: str) -> None:
+        buf = ""
+        for part in script.split(";"):
+            buf += part + ";"
+            if sqlite3.complete_statement(buf):
+                self._con.execute(buf)
+                buf = ""
+        if buf.strip(" \t\n;"):   # last statement without its semicolon
+            self._con.execute(buf)
 
 
 def _fsync(path: pathlib.Path) -> None:
@@ -911,8 +978,8 @@ def build(quick: bool = False, with_extra: bool = False,
     intel.stub_missing_cwes(con)
     intel.rebuild_aliases(con)
     con.commit()
-    finish(con)
-    for k, v in (("schema", str(paths.SCHEMA_VERSION)),
+    finish(con, optimize=True)
+    for k, v in (("schema", str(paths.SCHEMA_VERSION)), ("fts_rowid", "1"),
                  ("built_at", time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())),
                  ("updated_at", time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))):
         con.execute("INSERT OR REPLACE INTO meta VALUES (?,?)", (k, v))
@@ -934,28 +1001,41 @@ def build(quick: bool = False, with_extra: bool = False,
 def update(deep: bool = False, progress=None) -> dict:
     """Apply the NVD `modified` feed + refresh intel tables, then swap atomically.
 
-    All work happens on a copy (``crowbar.db.tmp``); only a complete run replaces the
-    live index via ``os.replace``, so a crash or kill leaves the old DB intact.
+    On a copy-on-write filesystem all work happens on a clone (``crowbar.db.tmp``) and only
+    a complete run replaces the live index via ``os.replace``. Elsewhere (exFAT, USB) the
+    live DB is updated inside one transaction: the rollback journal gives the same crash
+    atomicity without a second copy, but once the changes outgrow the page cache SQLite takes
+    an exclusive lock, so readers can wait for most of the run.
     """
     t0 = time.time()
     if not paths.DB.exists():
         raise FileNotFoundError(f"no index to update: {paths.DB} (run: crowbar build)")
-    tmp = paths.DB.with_suffix(".db.tmp")
-    if tmp.exists():
-        tmp.unlink()
-    _clone(paths.DB, tmp)
-    con = sqlite3.connect(tmp, timeout=90)
-    con.row_factory = sqlite3.Row
-    # the copy is thrown away on failure, so durability is only needed at the swap
-    con.executescript("PRAGMA synchronous=OFF; PRAGMA journal_mode=MEMORY; PRAGMA temp_store=MEMORY;"
-                      "PRAGMA cache_size=-262144;")
+    db.recover_journal(paths.DB)   # a leftover journal would make the read-only open fail
+    live = sqlite3.connect(db.ro_uri(paths.DB), uri=True)
     try:
-        try:
-            schema = int(con.execute("SELECT value FROM meta WHERE key='schema'").fetchone()[0])
-        except (sqlite3.DatabaseError, TypeError, ValueError):
-            schema = 0
-        if schema < paths.SCHEMA_VERSION:
-            intel.migrate(con, progress)
+        schema = db.schema_version(live)
+    finally:
+        live.close()
+    if schema != paths.SCHEMA_VERSION:
+        # v4 recreated the link tables and realigned cve_fts rowids: nothing to migrate in place
+        raise ValueError(f"index schema v{schema} needs a rebuild: run crowbar build")
+    tmp = paths.DB.with_suffix(".db.tmp")
+    tmp.unlink(missing_ok=True)
+    cloned = _clone(paths.DB, tmp)
+    con = sqlite3.connect(tmp if cloned else paths.DB, timeout=90)
+    con.row_factory = sqlite3.Row
+    if cloned:
+        # the copy is thrown away on failure, so durability is only needed at the swap
+        con.executescript("PRAGMA synchronous=OFF; PRAGMA journal_mode=MEMORY; PRAGMA temp_store=MEMORY;"
+                          "PRAGMA cache_size=-262144;")
+    else:
+        con.executescript("PRAGMA temp_store=MEMORY; PRAGMA cache_size=-262144;")
+        con.isolation_level = None   # no implicit BEGIN/COMMIT: the transaction below is the only one
+        con.execute("BEGIN IMMEDIATE")
+        con = _OneTxn(con)
+    try:
+        if migrate_fts_rowids(con) and progress:
+            progress("cve_fts renumbered")
 
         epss = read_epss(paths.DATA / "epss/epss_scores-current.csv.gz")
         if progress:
@@ -1009,13 +1089,18 @@ def update(deep: bool = False, progress=None) -> dict:
         stats = {"updated_at": now, "rows_touched": changed,
                  "seconds": round(time.time() - t0, 1),
                  "cve": con.execute("SELECT count(*) FROM cve").fetchone()[0]}
+        if not cloned:
+            con.execute("COMMIT")
         con.close()
     except BaseException:
+        if not cloned and con.in_transaction:
+            con.execute("ROLLBACK")
         con.close()
         tmp.unlink(missing_ok=True)
         raise
-    _fsync(tmp)
-    tmp.replace(paths.DB)
+    if cloned:
+        _fsync(tmp)
+        tmp.replace(paths.DB)
 
     full = summarize()
     full.update(stats)
@@ -1030,6 +1115,10 @@ def _write_stats(stats: dict) -> None:
 def summarize() -> dict:
     con = sqlite3.connect(db.ro_uri(paths.DB), uri=True)
     out = db.counts(con)
+    try:
+        out.update(db.flag_counts(con))
+    except sqlite3.DatabaseError:
+        pass
     out["meta"] = db.meta(con)
     con.close()
     out["db_bytes"] = paths.DB.stat().st_size

@@ -79,6 +79,10 @@ def record_source(con: sqlite3.Connection, source: str, *, path: pathlib.Path | 
 
 
 # ---------------------------------------------------------------- schema
+# OR REPLACE: a feed that lists one CVE twice hits the same rowid twice.
+# rowid = year*1e8 + seq (indexer.FTS_ROWID_SQL): deterministic, so deletes address rows by rowid
+FTS_INSERT = ("INSERT OR REPLACE INTO cve_fts(rowid,id,description,products) VALUES "
+              "(CAST(substr(?1,5,4) AS INTEGER)*100000000+CAST(substr(?1,10) AS INTEGER),?1,?2,?3)")
 V3_SCHEMA = """
 CREATE TABLE IF NOT EXISTS cve_cna(
   cve_id TEXT PRIMARY KEY,
@@ -90,11 +94,11 @@ CREATE TABLE IF NOT EXISTS cve_cna(
 CREATE TABLE IF NOT EXISTS cve_cna_ref(
   cve_id TEXT, url TEXT, tags TEXT,
   PRIMARY KEY(cve_id, url)
-);
+) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS cve_cna_product(
   cve_id TEXT, vendor TEXT, product TEXT,
   PRIMARY KEY(cve_id, vendor, product)
-);
+) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS cve_cna_cwe(
   cve_id TEXT, cwe TEXT,
   PRIMARY KEY(cve_id, cwe)
@@ -114,7 +118,7 @@ CREATE TABLE IF NOT EXISTS poc_orphan(cve_id TEXT PRIMARY KEY, count INTEGER);
 CREATE TABLE IF NOT EXISTS cve_alias(
   cve_id TEXT, alias TEXT, source TEXT,
   PRIMARY KEY(cve_id, alias, source)
-);
+) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS source_state(
   source TEXT PRIMARY KEY, url TEXT, path TEXT, license TEXT, sha256 TEXT,
   fetched_at TEXT, loaded_at TEXT, record_count INTEGER, status TEXT, note TEXT
@@ -130,10 +134,9 @@ CREATE INDEX IF NOT EXISTS cve_alias_alias ON cve_alias(alias);
 
 
 def migrate(con: sqlite3.Connection, progress=None) -> None:
-    """Upgrade a v2 index in place.  Safe to call repeatedly."""
+    """Upgrade a v2 index to v3 in place (scripts/merge_p0.py).  v3 -> v4 needs `crowbar build`."""
     con.executescript(V3_SCHEMA)
-    # Exact duplicate CPE rows were an audit finding.  Deduplicate before the
-    # unique index is created so the migration cannot fail on existing data.
+    # Exact duplicate CPE rows were an audit finding.
     dedupe = (
         ("cve_cwe", "cve_id,cwe"),
         ("cve_product", "cve_id,vendor,product"),
@@ -146,16 +149,9 @@ def migrate(con: sqlite3.Connection, progress=None) -> None:
             f"DELETE FROM {table} WHERE rowid NOT IN "
             f"(SELECT min(rowid) FROM {table} GROUP BY {cols})"
         )
-    con.executescript("""
-CREATE UNIQUE INDEX IF NOT EXISTS cve_cwe_unique ON cve_cwe(cve_id,cwe);
-CREATE UNIQUE INDEX IF NOT EXISTS cve_product_unique ON cve_product(cve_id,vendor,product);
-CREATE UNIQUE INDEX IF NOT EXISTS cpe_match_unique ON cpe_match(
-  cve_id,part,vendor,product,version,v_start_incl,v_start_excl,v_end_incl,v_end_excl);
-CREATE UNIQUE INDEX IF NOT EXISTS cve_ref_unique ON cve_ref(cve_id,url);
-""")
     rebuild_cve_meta(con)
     stub_missing_cwes(con)
-    con.execute("INSERT OR REPLACE INTO meta VALUES ('schema',?)", (str(paths.SCHEMA_VERSION),))
+    con.execute("INSERT OR REPLACE INTO meta VALUES ('schema','3')")
     con.commit()
     if progress:
         progress("schema v3 migrated")
@@ -319,8 +315,7 @@ def load_cveorg(path: pathlib.Path, con: sqlite3.Connection, *, epss: dict | Non
             con.executemany("INSERT OR IGNORE INTO cve_cna_product VALUES (?,?,?)",
                             cna_prod_rows)
         if fts_rows:
-            con.executemany("INSERT INTO cve_fts(id,description,products) VALUES (?,?,?)",
-                            fts_rows)
+            con.executemany(FTS_INSERT, fts_rows)
         if meta_rows:
             con.executemany(
                 "INSERT INTO cve_meta(cve_id,published_year,cve_year) VALUES (?,?,?) "

@@ -47,19 +47,26 @@ Downloaded raw intel: `docs/INTEL.md`.
       20k cap); `--product/--vendor` filters use indexes; stats reuse `stats.json`;
       CLI import 88 → 42 ms; one DB open per command. `crowbar bench`.
 
+## Done (2026-10-27)
+
+- [x] FTS relevance: top-N inside FTS before the join; `--cwe/--ssvc/--poc` use `IN`.
+- [x] MCP: one read-only connection, reopened on inode change; mmap/cache PRAGMAs.
+- [x] **`cve_fts` delete filtered an UNINDEXED column** (full FTS scan per 800 ids):
+      FTS rows now share their `cve` rowid and `delete_cves` deletes by rowid.
+- [x] **Schema v4** (needs `crowbar build`; `update` refuses a v3 index): link tables
+      are `WITHOUT ROWID` (no second copy in a unique index; absent CPE bounds are
+      `''`), `cve_fts` has `prefix='4 5 6'`. `detail` stays full: `fts_query` emits
+      phrases for dotted/underscored tokens (`"1.18.0"*`), which `detail=none|column` reject.
+- [x] `exploit <id>` is offline by default (`--fetch` downloads); `doctor --json`; `query`
+      positional optional for nuclei/msf/attack/bin; one `norm()`/`CVE_RE` in `loaders.py`;
+      `summarize()` reuses `db.counts()`.
+
 ## Audit follow-ups not done yet
 
-- [ ] `cve_fts` delete filters an UNINDEXED column (full scan per 800 ids): give
-      FTS rows a fixed rowid and delete by rowid (needs a rebuild).
 - [ ] `update` still writes a full DB copy on non-CoW filesystems (exFAT USB):
       update in place inside one transaction instead.
 - [ ] CVE List + PoC tarballs reload on every update (minutes): delta releases, or
       move them to `--deep`.
-- [ ] MCP: keep one read-only connection, reopen on inode change; mmap/cache PRAGMAs.
-- [ ] FTS relevance: top-N inside FTS before the join when no filters are set.
-- [ ] `exploit <id>` downloads by default: offline lookup + `--fetch`.
-- [ ] `doctor --json`; `query` positional optional for nuclei/msf/attack/... ;
-      dedupe `_norm`/`CVE_RE` copies; `summarize()` → `db.counts()`.
 
 ## P0 - correctness and integrity
 

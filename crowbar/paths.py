@@ -21,7 +21,7 @@ SKILL = ROOT / "skills" / "crowbar"
 HOME_LINK = pathlib.Path.home() / ".crowbar"
 DRIVE_MARKER = ".crowbar-drive"
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 FIRST_YEAR = 2002
 YEARS = list(range(FIRST_YEAR, date.today().year + 1))
 
