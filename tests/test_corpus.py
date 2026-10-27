@@ -3,6 +3,7 @@
 Skipped automatically when `index/crowbar.db` is absent (CI runs the fixture suite).
 Target: >1000 independent cases covering every table and surface.
 """
+
 from __future__ import annotations
 
 import json
@@ -24,7 +25,7 @@ S: dict[str, list] = {}
 
 # The index's tier decides which sources it carries; a test for a missing source skips.
 TIER = datasets.load_manifest().get("tier") if CORPUS else None
-HAVE = datasets.tier_groups(TIER) if TIER in datasets.TIER_NAMES[:-1] else None   # None: every source
+HAVE = datasets.tier_groups(TIER) if TIER in datasets.TIER_NAMES[:-1] else None  # None: every source
 full_nvd = unittest.skipIf(TIER == "lite", "tier lite keeps only the last 2 NVD years")
 
 
@@ -41,8 +42,8 @@ def _sample(table: str, col: str, n: int, where: str = "", order: str | None = N
     out, off = [], 0
     while len(out) < n and off < total:
         row = CON.execute(
-            f"SELECT {col} FROM {table} {where} ORDER BY {order or col} "
-            f"LIMIT 1 OFFSET ?", (off,)).fetchone()
+            f"SELECT {col} FROM {table} {where} ORDER BY {order or col} LIMIT 1 OFFSET ?", (off,)
+        ).fetchone()
         if row and row[0] not in out:
             out.append(row[0])
         off += step
@@ -55,15 +56,18 @@ def _load_samples() -> None:
     S["cves"] = _sample("cve", "id", 400)
     S["products"] = []
     for cid in S["cves"][:400]:
-        r = CON.execute("SELECT product FROM cve_product WHERE cve_id=? LIMIT 1",
-                        (cid,)).fetchone()
+        r = CON.execute("SELECT product FROM cve_product WHERE cve_id=? LIMIT 1", (cid,)).fetchone()
         if r and r[0] and r[0] not in S["products"]:
             S["products"].append(r[0])
         if len(S["products"]) >= 60:
             break
-    S["version_rows"] = [dict(r) for r in CON.execute(
-        "SELECT * FROM cpe_match WHERE (v_start_incl != '' OR v_end_incl != '' "
-        "OR v_start_excl != '' OR v_end_excl != '') LIMIT 200")]
+    S["version_rows"] = [
+        dict(r)
+        for r in CON.execute(
+            "SELECT * FROM cpe_match WHERE (v_start_incl != '' OR v_end_incl != '' "
+            "OR v_start_excl != '' OR v_end_excl != '') LIMIT 200"
+        )
+    ]
     S["searches"] = []
     for cid in S["cves"]:
         r = CON.execute("SELECT description FROM cve WHERE id=?", (cid,)).fetchone()
@@ -99,7 +103,6 @@ def tearDownModule():
         CON.close()
 
 
-
 if CORPUS:
     _load_samples()
 
@@ -107,12 +110,13 @@ if CORPUS:
 def add(cls, suffix: str, fn) -> None:
     def test(self, _fn=fn):
         _fn(self)
+
     test.__name__ = f"test_{suffix}"
     setattr(cls, test.__name__, test)
 
 
 # ------------------------------------------------------------------ CVEs
-@unittest.skipUnless(CORPUS, 'no corpus index')
+@unittest.skipUnless(CORPUS, "no corpus index")
 class TestCorpusCVE(unittest.TestCase):
     pass
 
@@ -124,6 +128,7 @@ def _cve(cid):
         self.assertIn("description", c)
         self.assertIsInstance(c["cwe"], list)
         self.assertIsInstance(c["affects"], list)
+
     return run
 
 
@@ -137,6 +142,7 @@ def _search(term):
         self.assertIsInstance(rows, list)
         self.assertTrue(rows, f"no hit for sampled term {term!r}")
         self.assertTrue(all("id" in r for r in rows))
+
     return run
 
 
@@ -145,7 +151,7 @@ for i, term in enumerate(S.get("searches", [])[:80]):
 
 
 # ------------------------------------------------------------------ products
-@unittest.skipUnless(CORPUS, 'no corpus index')
+@unittest.skipUnless(CORPUS, "no corpus index")
 class TestCorpusProducts(unittest.TestCase):
     pass
 
@@ -161,10 +167,11 @@ def _product(name):
         q = f"%{name.lower()}%"
         for r in rows:
             hit = CON.execute(
-                "SELECT 1 FROM cpe_match WHERE cve_id=? AND (product LIKE ? OR vendor LIKE ?) "
-                "LIMIT 1", (r["id"], q, q)).fetchone()
-            self.assertIsNotNone(
-                hit, f"{r['id']} returned for product {name!r} with no matching CPE")
+                "SELECT 1 FROM cpe_match WHERE cve_id=? AND (product LIKE ? OR vendor LIKE ?) LIMIT 1",
+                (r["id"], q, q),
+            ).fetchone()
+            self.assertIsNotNone(hit, f"{r['id']} returned for product {name!r} with no matching CPE")
+
     return run
 
 
@@ -183,6 +190,7 @@ def _version_triplet(row):
         if row["v_start_excl"]:
             self.assertFalse(query.version_affected(row, row["v_start_excl"]))
         self.assertIn(":", query.range_label(row))
+
     return run
 
 
@@ -192,7 +200,7 @@ for i, row in enumerate(S.get("version_rows", [])[:120]):
 
 
 # ------------------------------------------------------------------ intel
-@unittest.skipUnless(CORPUS, 'no corpus index')
+@unittest.skipUnless(CORPUS, "no corpus index")
 class TestCorpusIntel(unittest.TestCase):
     pass
 
@@ -207,9 +215,9 @@ def _exploit(eid, term):
         # stemming (the exact `eid` is often ranked out of the top 20).
         stem = term[:4]
         for r in rows:
-            blob = " ".join(str(r.get(k) or "")
-                            for k in ("description", "tags", "codes", "file")).lower()
+            blob = " ".join(str(r.get(k) or "") for k in ("description", "tags", "codes", "file")).lower()
             self.assertIn(stem, blob, f"exploit {r.get('id')} unrelated to {term!r}")
+
     return run
 
 
@@ -222,6 +230,7 @@ def _nuclei(tid):
         rows = query.nuclei_search(CON, tid, limit=10)
         self.assertTrue(rows)
         self.assertTrue(any(tid in r["id"] for r in rows))
+
     return run
 
 
@@ -234,6 +243,7 @@ def _msf(name):
         rows = query.msf_search(CON, name, limit=20)
         self.assertTrue(rows)
         self.assertTrue(any(r["name"].lower() == name.lower() for r in rows))
+
     return run
 
 
@@ -245,6 +255,7 @@ def _cwe(cid):
     def run(self):
         d = query.cwe_get(CON, cid)
         self.assertEqual(d["id"], cid)
+
     return run
 
 
@@ -257,6 +268,7 @@ def _capec(cid):
         rows = query.capec_search(CON, cid)
         self.assertTrue(rows)
         self.assertTrue(any(r["id"] == cid for r in rows))
+
     return run
 
 
@@ -269,6 +281,7 @@ def _attack(tid):
         rows = query.attack_lookup(CON, tid)
         self.assertTrue(rows)
         self.assertTrue(any(r["id"] == tid for r in rows))
+
     return run
 
 
@@ -281,6 +294,7 @@ def _model(mid):
         rows = query.models_list(CON, mid, limit=10)
         self.assertTrue(rows)
         self.assertTrue(any(r["id"] == mid for r in rows))
+
     return run
 
 
@@ -292,6 +306,7 @@ def _kev(vendor):
     def run(self):
         rows = query.kev_list(CON, vendor, limit=10)
         self.assertTrue(rows)
+
     return run
 
 
@@ -300,7 +315,7 @@ for i, vendor in enumerate(S.get("kev", [])[:50]):
 
 
 # ------------------------------------------------------------------ bulk
-@unittest.skipUnless(CORPUS, 'no corpus index')
+@unittest.skipUnless(CORPUS, "no corpus index")
 class TestCorpusBulk(unittest.TestCase):
     pass
 
@@ -311,6 +326,7 @@ def _advisory(pkg):
         self.assertTrue(rows)
         self.assertTrue(all(r["package"] == pkg.lower() for r in rows))
         self.assertTrue(any(r.get("ranges") for r in rows))
+
     return run
 
 
@@ -322,8 +338,11 @@ def _range2(aid):
     def run(self):
         rows = CON.execute(
             "SELECT ecosystem, package, introduced, fixed, last_affected "
-            "FROM package_range WHERE advisory_id=? LIMIT 5", (aid,)).fetchall()
+            "FROM package_range WHERE advisory_id=? LIMIT 5",
+            (aid,),
+        ).fetchall()
         self.assertTrue(rows)
+
     return run
 
 
@@ -336,6 +355,7 @@ def _debian(pkg):
         rows = query.debian_lookup(CON, pkg)
         self.assertTrue(rows)
         self.assertTrue(all("fixed" in r for r in rows))
+
     return run
 
 
@@ -348,6 +368,7 @@ def _os(cve):
         rows = query.os_search(CON, cve)
         self.assertTrue(rows)
         self.assertTrue(all(r["cve"] == cve for r in rows if r["cve"]))
+
     return run
 
 
@@ -360,6 +381,7 @@ def _toolkit(name):
         rows = query.toolkit_search(CON, name, limit=10)
         self.assertTrue(rows)
         self.assertTrue(any(r["name"].lower() == name.lower() for r in rows))
+
     return run
 
 
@@ -367,8 +389,20 @@ for i, name in enumerate(S.get("toolkit", [])[:60]):
     add(TestCorpusBulk, f"toolkit_{i:03d}", _toolkit(name))
 
 
-CODE_TERMS = ["http", "socket", "buffer", "printf", "payload", "admin",
-              "password", "shell", "system", "exec", "connect", "request"]
+CODE_TERMS = [
+    "http",
+    "socket",
+    "buffer",
+    "printf",
+    "payload",
+    "admin",
+    "password",
+    "shell",
+    "system",
+    "exec",
+    "connect",
+    "request",
+]
 
 
 def _code(term):
@@ -376,6 +410,7 @@ def _code(term):
         rows = query.code_search(CON, term, limit=10)
         self.assertTrue(rows)
         self.assertTrue(all(r["path"] for r in rows))
+
     return run
 
 
@@ -384,7 +419,7 @@ for i, term in enumerate(CODE_TERMS):
 
 
 # ------------------------------------------------------------------ invariants
-@unittest.skipUnless(CORPUS, 'no corpus index')
+@unittest.skipUnless(CORPUS, "no corpus index")
 class TestCorpusIntegrity(unittest.TestCase):
     @full_nvd
     def test_cve_count(self):
@@ -414,12 +449,12 @@ class TestCorpusIntegrity(unittest.TestCase):
     def test_year_matches_published(self):
         bad = CON.execute(
             "SELECT count(*) FROM cve WHERE published != '' "
-            "AND year != cast(substr(published,1,4) as integer)").fetchone()[0]
+            "AND year != cast(substr(published,1,4) as integer)"
+        ).fetchone()[0]
         self.assertEqual(bad, 0)
 
     def test_cwe_shape(self):
-        bad = CON.execute(
-            "SELECT count(*) FROM cve_cwe WHERE cwe NOT GLOB 'CWE-[0-9]*'").fetchone()[0]
+        bad = CON.execute("SELECT count(*) FROM cve_cwe WHERE cwe NOT GLOB 'CWE-[0-9]*'").fetchone()[0]
         self.assertEqual(bad, 0)
 
     def test_fts_cve_sync(self):
@@ -447,18 +482,21 @@ class TestCorpusIntegrity(unittest.TestCase):
 
     @needs("vendor")
     def test_os_windows(self):
-        self.assertGreater(CON.execute(
-            "SELECT count(*) FROM os_advisory WHERE platform='windows'").fetchone()[0], 10_000)
+        self.assertGreater(
+            CON.execute("SELECT count(*) FROM os_advisory WHERE platform='windows'").fetchone()[0], 10_000
+        )
 
     @needs("vendor")
     def test_os_ios(self):
-        self.assertGreater(CON.execute(
-            "SELECT count(*) FROM os_advisory WHERE platform='ios'").fetchone()[0], 100)
+        self.assertGreater(
+            CON.execute("SELECT count(*) FROM os_advisory WHERE platform='ios'").fetchone()[0], 100
+        )
 
     @needs("vendor")
     def test_os_macos(self):
-        self.assertGreater(CON.execute(
-            "SELECT count(*) FROM os_advisory WHERE platform='macos'").fetchone()[0], 100)
+        self.assertGreater(
+            CON.execute("SELECT count(*) FROM os_advisory WHERE platform='macos'").fetchone()[0], 100
+        )
 
     @needs("debian")
     def test_debian_rows(self):
@@ -470,8 +508,7 @@ class TestCorpusIntegrity(unittest.TestCase):
 
     @needs("exploitdb")
     def test_exploit_code_rows(self):
-        self.assertGreater(CON.execute(
-            "SELECT count(*) FROM exploit_code_fts").fetchone()[0], 10_000)
+        self.assertGreater(CON.execute("SELECT count(*) FROM exploit_code_fts").fetchone()[0], 10_000)
 
     @needs("metasploit")
     def test_msf_cves_linked(self):
@@ -479,20 +516,20 @@ class TestCorpusIntegrity(unittest.TestCase):
 
     def test_msf_cve_flag_consistent(self):
         bad = CON.execute(
-            "SELECT count(*) FROM cve WHERE has_msf=1 AND id NOT IN "
-            "(SELECT cve_id FROM cve_msf)").fetchone()[0]
+            "SELECT count(*) FROM cve WHERE has_msf=1 AND id NOT IN (SELECT cve_id FROM cve_msf)"
+        ).fetchone()[0]
         self.assertEqual(bad, 0)
 
     def test_exploit_flag_consistent(self):
         bad = CON.execute(
-            "SELECT count(*) FROM cve WHERE has_exploit=1 AND id NOT IN "
-            "(SELECT cve_id FROM cve_exploit)").fetchone()[0]
+            "SELECT count(*) FROM cve WHERE has_exploit=1 AND id NOT IN (SELECT cve_id FROM cve_exploit)"
+        ).fetchone()[0]
         self.assertEqual(bad, 0)
 
     def test_nuclei_flag_consistent(self):
         bad = CON.execute(
-            "SELECT count(*) FROM cve WHERE has_nuclei=1 AND id NOT IN "
-            "(SELECT cve_id FROM cve_nuclei)").fetchone()[0]
+            "SELECT count(*) FROM cve WHERE has_nuclei=1 AND id NOT IN (SELECT cve_id FROM cve_nuclei)"
+        ).fetchone()[0]
         self.assertEqual(bad, 0)
 
     def test_kev_flag_consistent(self):
@@ -530,8 +567,7 @@ class TestCorpusIntegrity(unittest.TestCase):
     def test_manifest_paths_exist(self):
         m = datasets.load_manifest().get("datasets", {})
         self.assertTrue(m)
-        missing = [name for name, v in m.items()
-                   if v.get("path") and not (paths.DATA / v["path"]).exists()]
+        missing = [name for name, v in m.items() if v.get("path") and not (paths.DATA / v["path"]).exists()]
         self.assertEqual(missing, [])
 
     def test_state_schema(self):
@@ -539,9 +575,20 @@ class TestCorpusIntegrity(unittest.TestCase):
 
     def test_stats_payload(self):
         s = db.counts(CON)
-        source = {"cve": "nvd", "kev": "kev", "exploit": "exploitdb", "nuclei": "nuclei",
-                  "msf": "metasploit", "attack": "attack", "cwe": "cwe", "capec": "capec",
-                  "model": "models", "advisory": "osv", "os_advisory": "vendor", "toolkit": "toolkit"}
+        source = {
+            "cve": "nvd",
+            "kev": "kev",
+            "exploit": "exploitdb",
+            "nuclei": "nuclei",
+            "msf": "metasploit",
+            "attack": "attack",
+            "cwe": "cwe",
+            "capec": "capec",
+            "model": "models",
+            "advisory": "osv",
+            "os_advisory": "vendor",
+            "toolkit": "toolkit",
+        }
         for t, group in source.items():
             self.assertIn(t, s)
             if HAVE is None or group in HAVE:
@@ -549,7 +596,7 @@ class TestCorpusIntegrity(unittest.TestCase):
 
 
 # ------------------------------------------------------------------ CLI
-@unittest.skipUnless(CORPUS, 'no corpus index')
+@unittest.skipUnless(CORPUS, "no corpus index")
 class TestCorpusCLI(unittest.TestCase):
     def json(self, *args):
         return support.run_cb_json(*args)
@@ -645,14 +692,18 @@ class TestCorpusCLI(unittest.TestCase):
 
 
 # ------------------------------------------------------------------ MCP
-@unittest.skipUnless(CORPUS, 'no corpus index')
+@unittest.skipUnless(CORPUS, "no corpus index")
 class TestCorpusMCP(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.proc = subprocess.Popen(
             [sys.executable, str(support.ROOT / "mcp" / "server.py")],
-            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            text=True, env=dict(os.environ))
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env=dict(os.environ),
+        )
         cls.n = 0
         cls.request("initialize", {"protocolVersion": "2025-06-18"})
 
@@ -664,8 +715,9 @@ class TestCorpusMCP(unittest.TestCase):
     @classmethod
     def request(cls, method, params=None):
         cls.n += 1
-        cls.proc.stdin.write(json.dumps(
-            {"jsonrpc": "2.0", "id": cls.n, "method": method, "params": params or {}}) + "\n")
+        cls.proc.stdin.write(
+            json.dumps({"jsonrpc": "2.0", "id": cls.n, "method": method, "params": params or {}}) + "\n"
+        )
         cls.proc.stdin.flush()
         return json.loads(cls.proc.stdout.readline())
 
@@ -742,8 +794,7 @@ class TestCorpusMCP(unittest.TestCase):
 
     @full_nvd
     def test_sql(self):
-        self.assertGreater(self.call("cb_sql", {"query": "select count(*) as n from cve"})[0]["n"],
-                           400_000)
+        self.assertGreater(self.call("cb_sql", {"query": "select count(*) as n from cve"})[0]["n"], 400_000)
 
 
 if __name__ == "__main__":

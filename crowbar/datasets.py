@@ -1,4 +1,5 @@
 """Dataset registry, downloader, and freshness tracking."""
+
 from __future__ import annotations
 
 import calendar
@@ -27,6 +28,7 @@ except ImportError:  # Windows
     fcntl = None
 
 from crowbar import __version__ as _V
+
 UA = f"crowbar/{_V} (+https://github.com/kushvinth/crowbar)"
 
 # A mirror is a flat directory made by `crowbar pack`, hosted wherever the
@@ -37,6 +39,7 @@ DEFAULT_MIRROR = ""
 
 def mirror_url() -> str:
     return os.environ.get("CROWBAR_MIRROR", DEFAULT_MIRROR).rstrip("/")
+
 
 # NVD's CDN resets connections when one client opens several at once
 _HOST_SLOTS: dict[str, threading.BoundedSemaphore] = {}
@@ -53,11 +56,11 @@ def _host_slot(url: str) -> threading.BoundedSemaphore:
 class Dataset:
     name: str
     group: str
-    kind: str            # http | git
+    kind: str  # http | git
     url: str
     dest: str
     note: str
-    tier: str = "core"   # core | extra | bulk
+    tier: str = "core"  # core | extra | bulk
     sparse: str | None = None
     optional: bool = False
 
@@ -68,108 +71,261 @@ class Dataset:
 
 def _nvd(year: int, kind: str = "year") -> Dataset:
     if kind == "year":
-        return Dataset(f"nvd-{year}", "nvd", "http",
-                       f"https://nvd.nist.gov/feeds/json/cve/2.0/nvdcve-2.0-{year}.json.gz",
-                       f"nvd/nvdcve-2.0-{year}.json.gz", f"NVD CVE feed, year {year}")
-    return Dataset(f"nvd-{kind}", "nvd", "http",
-                   f"https://nvd.nist.gov/feeds/json/cve/2.0/nvdcve-2.0-{kind}.json.gz",
-                   f"nvd/nvdcve-2.0-{kind}.json.gz",
-                   f"NVD CVE {kind} feed (last 8 days of changes)")
+        return Dataset(
+            f"nvd-{year}",
+            "nvd",
+            "http",
+            f"https://nvd.nist.gov/feeds/json/cve/2.0/nvdcve-2.0-{year}.json.gz",
+            f"nvd/nvdcve-2.0-{year}.json.gz",
+            f"NVD CVE feed, year {year}",
+        )
+    return Dataset(
+        f"nvd-{kind}",
+        "nvd",
+        "http",
+        f"https://nvd.nist.gov/feeds/json/cve/2.0/nvdcve-2.0-{kind}.json.gz",
+        f"nvd/nvdcve-2.0-{kind}.json.gz",
+        f"NVD CVE {kind} feed (last 8 days of changes)",
+    )
 
 
 CORE_INTEL = [
-    Dataset("cveorg-cvelist", "cveorg", "http",
-            "https://codeload.github.com/CVEProject/cvelistV5/tar.gz/refs/heads/main",
-            "intel/cveorg/cvelistV5-main.tar.gz",
-            "MITRE CVE List v5 (CNA records, affected products, references)"),
-    Dataset("poc-in-github", "poc", "http",
-            "https://codeload.github.com/nomi-sec/PoC-in-GitHub/tar.gz/refs/heads/master",
-            "intel/poc-in-github/PoC-in-GitHub-master.tar.gz",
-            "PoC-in-GitHub (public PoC repo metadata; never executed)"),
-    Dataset("epss", "epss", "http",
-            "https://epss.empiricalsecurity.com/epss_scores-current.csv.gz",
-            "epss/epss_scores-current.csv.gz", "FIRST EPSS exploit-prediction scores"),
-    Dataset("kev", "kev", "http",
-            "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json",
-            "kev/known_exploited_vulnerabilities.json", "CISA Known Exploited Vulnerabilities"),
-    Dataset("cwe", "cwe", "http", "https://cwe.mitre.org/data/xml/cwec_latest.xml.zip",
-            "cwe/cwec_latest.xml.zip", "MITRE CWE taxonomy"),
-    Dataset("capec", "capec", "http", "https://capec.mitre.org/data/xml/capec_latest.xml",
-            "capec/capec_latest.xml", "MITRE CAPEC attack patterns"),
-    Dataset("exploitdb", "exploitdb", "http",
-            "https://gitlab.com/exploit-database/exploitdb/-/raw/main/files_exploits.csv",
-            "exploitdb/files_exploits.csv", "Exploit-DB index (46k entries)"),
-    Dataset("exploitdb-shellcodes", "exploitdb", "http",
-            "https://gitlab.com/exploit-database/exploitdb/-/raw/main/files_shellcodes.csv",
-            "exploitdb/files_shellcodes.csv", "Exploit-DB shellcode index"),
-    Dataset("nuclei", "nuclei", "git", "https://github.com/projectdiscovery/nuclei-templates.git",
-            "nuclei/templates", "Nuclei template library (YAML)"),
-    Dataset("metasploit", "metasploit", "http",
-            "https://api.github.com/repos/rapid7/metasploit-framework/git/trees/master?recursive=1",
-            "metasploit/tree.json", "Metasploit module tree"),
-    Dataset("models", "models", "http", "https://models.dev/api.json",
-            "models/models.dev.json", "LLM catalog: providers, context, price"),
+    Dataset(
+        "cveorg-cvelist",
+        "cveorg",
+        "http",
+        "https://codeload.github.com/CVEProject/cvelistV5/tar.gz/refs/heads/main",
+        "intel/cveorg/cvelistV5-main.tar.gz",
+        "MITRE CVE List v5 (CNA records, affected products, references)",
+    ),
+    Dataset(
+        "poc-in-github",
+        "poc",
+        "http",
+        "https://codeload.github.com/nomi-sec/PoC-in-GitHub/tar.gz/refs/heads/master",
+        "intel/poc-in-github/PoC-in-GitHub-master.tar.gz",
+        "PoC-in-GitHub (public PoC repo metadata; never executed)",
+    ),
+    Dataset(
+        "epss",
+        "epss",
+        "http",
+        "https://epss.empiricalsecurity.com/epss_scores-current.csv.gz",
+        "epss/epss_scores-current.csv.gz",
+        "FIRST EPSS exploit-prediction scores",
+    ),
+    Dataset(
+        "kev",
+        "kev",
+        "http",
+        "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json",
+        "kev/known_exploited_vulnerabilities.json",
+        "CISA Known Exploited Vulnerabilities",
+    ),
+    Dataset(
+        "cwe",
+        "cwe",
+        "http",
+        "https://cwe.mitre.org/data/xml/cwec_latest.xml.zip",
+        "cwe/cwec_latest.xml.zip",
+        "MITRE CWE taxonomy",
+    ),
+    Dataset(
+        "capec",
+        "capec",
+        "http",
+        "https://capec.mitre.org/data/xml/capec_latest.xml",
+        "capec/capec_latest.xml",
+        "MITRE CAPEC attack patterns",
+    ),
+    Dataset(
+        "exploitdb",
+        "exploitdb",
+        "http",
+        "https://gitlab.com/exploit-database/exploitdb/-/raw/main/files_exploits.csv",
+        "exploitdb/files_exploits.csv",
+        "Exploit-DB index (46k entries)",
+    ),
+    Dataset(
+        "exploitdb-shellcodes",
+        "exploitdb",
+        "http",
+        "https://gitlab.com/exploit-database/exploitdb/-/raw/main/files_shellcodes.csv",
+        "exploitdb/files_shellcodes.csv",
+        "Exploit-DB shellcode index",
+    ),
+    Dataset(
+        "nuclei",
+        "nuclei",
+        "git",
+        "https://github.com/projectdiscovery/nuclei-templates.git",
+        "nuclei/templates",
+        "Nuclei template library (YAML)",
+    ),
+    Dataset(
+        "metasploit",
+        "metasploit",
+        "http",
+        "https://api.github.com/repos/rapid7/metasploit-framework/git/trees/master?recursive=1",
+        "metasploit/tree.json",
+        "Metasploit module tree",
+    ),
+    Dataset(
+        "models",
+        "models",
+        "http",
+        "https://models.dev/api.json",
+        "models/models.dev.json",
+        "LLM catalog: providers, context, price",
+    ),
 ]
 
 # small JSONL archives of posts naming a CVE; refreshed on every update
 # optional: a flaky feed must never block a sync or the stale-index catch-up
-CHATTER = [Dataset(name, "chatter", "chatter", url, f"chatter/{name}.jsonl", note, optional=True)
-           for name, (url, note) in chatter.SOURCES.items()]
+CHATTER = [
+    Dataset(name, "chatter", "chatter", url, f"chatter/{name}.jsonl", note, optional=True)
+    for name, (url, note) in chatter.SOURCES.items()
+]
 
 OSV_ECOSYSTEMS = [
-    ("npm", 209), ("PyPI", 35), ("Go", 12), ("Maven", 10), ("NuGet", 3),
-    ("RubyGems", 5), ("crates.io", 3), ("Packagist", 10), ("Debian", 73), ("Alpine", 4),
+    ("npm", 209),
+    ("PyPI", 35),
+    ("Go", 12),
+    ("Maven", 10),
+    ("NuGet", 3),
+    ("RubyGems", 5),
+    ("crates.io", 3),
+    ("Packagist", 10),
+    ("Debian", 73),
+    ("Alpine", 4),
 ]
 
 BULK_INTEL = [
-    *[Dataset(f"osv-{eco.lower()}", "osv", "http",
-              f"https://osv-vulnerabilities.storage.googleapis.com/{eco}/all.zip",
-              f"osv/{eco}.zip", f"OSV advisories for {eco} (GHSA + ecosystem DBs)",
-              tier="bulk")
-      for eco, _ in OSV_ECOSYSTEMS],
-    Dataset("exploitdb-full", "exploitdb", "git",
-            "https://gitlab.com/exploit-database/exploitdb.git",
-            "exploitdb/full", "Exploit-DB full sources (code search, 47k files)",
-            tier="bulk", sparse="exploits"),
-    Dataset("msrc", "vendor", "msrc",
-            "https://api.msrc.microsoft.com/sug/v2.0/en-US/vulnerability",
-            "msrc/sug.json", "MSRC Security Update Guide (Windows/Edge CVEs, severity, impact)"),
-    Dataset("apple", "vendor", "apple", "https://support.apple.com/en-us/100100",
-            "apple", "Apple security releases (iOS/iPadOS/macOS/watchOS advisories)"),
-    Dataset("debian-tracker", "debian", "http",
-            "https://security-tracker.debian.org/tracker/data/json",
-            "debian/tracker.json", "Debian security tracker (per-package fixed versions)"),
+    *[
+        Dataset(
+            f"osv-{eco.lower()}",
+            "osv",
+            "http",
+            f"https://osv-vulnerabilities.storage.googleapis.com/{eco}/all.zip",
+            f"osv/{eco}.zip",
+            f"OSV advisories for {eco} (GHSA + ecosystem DBs)",
+            tier="bulk",
+        )
+        for eco, _ in OSV_ECOSYSTEMS
+    ],
+    Dataset(
+        "exploitdb-full",
+        "exploitdb",
+        "git",
+        "https://gitlab.com/exploit-database/exploitdb.git",
+        "exploitdb/full",
+        "Exploit-DB full sources (code search, 47k files)",
+        tier="bulk",
+        sparse="exploits",
+    ),
+    Dataset(
+        "msrc",
+        "vendor",
+        "msrc",
+        "https://api.msrc.microsoft.com/sug/v2.0/en-US/vulnerability",
+        "msrc/sug.json",
+        "MSRC Security Update Guide (Windows/Edge CVEs, severity, impact)",
+    ),
+    Dataset(
+        "apple",
+        "vendor",
+        "apple",
+        "https://support.apple.com/en-us/100100",
+        "apple",
+        "Apple security releases (iOS/iPadOS/macOS/watchOS advisories)",
+    ),
+    Dataset(
+        "debian-tracker",
+        "debian",
+        "http",
+        "https://security-tracker.debian.org/tracker/data/json",
+        "debian/tracker.json",
+        "Debian security tracker (per-package fixed versions)",
+    ),
 ]
 
 EXTRA_INTEL = [
-    Dataset("attack-mobile", "attack", "http",
-            "https://raw.githubusercontent.com/mitre-attack/attack-stix-data/master/mobile-attack/mobile-attack.json",
-            "attack/mobile-attack.json", "ATT&CK Mobile STIX", tier="extra"),
-    Dataset("attack-ics", "attack", "http",
-            "https://raw.githubusercontent.com/mitre-attack/attack-stix-data/master/ics-attack/ics-attack.json",
-            "attack/ics-attack.json", "ATT&CK ICS STIX", tier="extra"),
-    Dataset("vulnrichment", "vulnrichment", "git", "https://github.com/cisagov/vulnrichment.git",
-            "vulnrichment", "CISA Vulnrichment (SSVC decision points, ADP data)", tier="extra"),
+    Dataset(
+        "attack-mobile",
+        "attack",
+        "http",
+        "https://raw.githubusercontent.com/mitre-attack/attack-stix-data/master/mobile-attack/mobile-attack.json",
+        "attack/mobile-attack.json",
+        "ATT&CK Mobile STIX",
+        tier="extra",
+    ),
+    Dataset(
+        "attack-ics",
+        "attack",
+        "http",
+        "https://raw.githubusercontent.com/mitre-attack/attack-stix-data/master/ics-attack/ics-attack.json",
+        "attack/ics-attack.json",
+        "ATT&CK ICS STIX",
+        tier="extra",
+    ),
+    Dataset(
+        "vulnrichment",
+        "vulnrichment",
+        "git",
+        "https://github.com/cisagov/vulnrichment.git",
+        "vulnrichment",
+        "CISA Vulnrichment (SSVC decision points, ADP data)",
+        tier="extra",
+    ),
 ]
 
 TOOLKIT = [
-    Dataset("gtfobins", "toolkit", "git", "https://github.com/GTFOBins/GTFOBins.github.io.git",
-            "toolkit/gtfobins", "GTFOBins (unix binary abuse)"),
-    Dataset("lolbas", "toolkit", "git", "https://github.com/LOLBAS-Project/LOLBAS.git",
-            "toolkit/lolbas", "LOLBAS (windows binary abuse)"),
-    Dataset("payloads", "toolkit", "git", "https://github.com/swisskyrepo/PayloadsAllTheThings.git",
-            "toolkit/payloads", "PayloadsAllTheThings (payload cheat sheets)"),
-    Dataset("msf-source", "metasploit", "git", "https://github.com/rapid7/metasploit-framework.git",
-            "metasploit/source", "Metasploit module sources (metadata + CVE refs)",
-            sparse="modules"),
+    Dataset(
+        "gtfobins",
+        "toolkit",
+        "git",
+        "https://github.com/GTFOBins/GTFOBins.github.io.git",
+        "toolkit/gtfobins",
+        "GTFOBins (unix binary abuse)",
+    ),
+    Dataset(
+        "lolbas",
+        "toolkit",
+        "git",
+        "https://github.com/LOLBAS-Project/LOLBAS.git",
+        "toolkit/lolbas",
+        "LOLBAS (windows binary abuse)",
+    ),
+    Dataset(
+        "payloads",
+        "toolkit",
+        "git",
+        "https://github.com/swisskyrepo/PayloadsAllTheThings.git",
+        "toolkit/payloads",
+        "PayloadsAllTheThings (payload cheat sheets)",
+    ),
+    Dataset(
+        "msf-source",
+        "metasploit",
+        "git",
+        "https://github.com/rapid7/metasploit-framework.git",
+        "metasploit/source",
+        "Metasploit module sources (metadata + CVE refs)",
+        sparse="modules",
+    ),
 ]
 
 
 def attack_enterprise() -> Dataset:
-    return Dataset("attack-enterprise", "attack", "http",
-                   "https://raw.githubusercontent.com/mitre-attack/attack-stix-data/master/"
-                   "enterprise-attack/enterprise-attack.json",
-                   "attack/enterprise-attack.json", "ATT&CK Enterprise STIX")
+    return Dataset(
+        "attack-enterprise",
+        "attack",
+        "http",
+        "https://raw.githubusercontent.com/mitre-attack/attack-stix-data/master/"
+        "enterprise-attack/enterprise-attack.json",
+        "attack/enterprise-attack.json",
+        "ATT&CK Enterprise STIX",
+    )
 
 
 def registry(with_extra: bool = False, with_bulk: bool = False) -> list[Dataset]:
@@ -184,8 +340,12 @@ def registry(with_extra: bool = False, with_bulk: bool = False) -> list[Dataset]
     return items
 
 
-def plan(only: list[str] | None = None, years: list[int] | None = None,
-         with_extra: bool = False, with_bulk: bool = False) -> list[Dataset]:
+def plan(
+    only: list[str] | None = None,
+    years: list[int] | None = None,
+    with_extra: bool = False,
+    with_bulk: bool = False,
+) -> list[Dataset]:
     items = registry(with_extra=True, with_bulk=True)
     if years:
         keep = set(years)
@@ -193,12 +353,19 @@ def plan(only: list[str] | None = None, years: list[int] | None = None,
     if only:
         want = {s.strip().lower() for s in only if s.strip()}
         # explicitly named extra datasets are always honoured
-        items = [d for d in items if d.name in want
-                 or (d.group in want and (d.tier == "core" or with_extra or with_bulk))]
+        items = [
+            d
+            for d in items
+            if d.name in want or (d.group in want and (d.tier == "core" or with_extra or with_bulk))
+        ]
     else:
-        items = [d for d in items
-                 if d.tier == "core" or (with_extra and d.tier == "extra")
-                 or (with_bulk and d.tier in ("extra", "bulk"))]
+        items = [
+            d
+            for d in items
+            if d.tier == "core"
+            or (with_extra and d.tier == "extra")
+            or (with_bulk and d.tier in ("extra", "bulk"))
+        ]
     return items
 
 
@@ -209,9 +376,9 @@ def plan(only: list[str] | None = None, years: list[int] | None = None,
 TIER_NAMES = ["lite", "medium", "heavy", "extreme"]
 TIER_SIZES = {"lite": "~150MB", "medium": "~500MB", "heavy": "~2GB", "extreme": "full"}
 _TIER_ADD = {
-    "lite":   {"nvd", "kev", "epss", "cwe", "chatter"},
+    "lite": {"nvd", "kev", "epss", "cwe", "chatter"},
     "medium": {"cveorg", "capec", "attack", "vulnrichment"},
-    "heavy":  {"exploitdb", "nuclei", "metasploit", "osv", "poc", "toolkit"},
+    "heavy": {"exploitdb", "nuclei", "metasploit", "osv", "poc", "toolkit"},
     # extreme == every source (handled in tier_plan)
 }
 
@@ -223,7 +390,6 @@ def tier_groups(tier: str) -> set[str]:
         if t == tier:
             break
     return out
-
 
 
 def tier_missing(tier: str | None) -> list[str]:
@@ -245,8 +411,7 @@ def tier_plan(tier: str) -> list[Dataset]:
     if tier == "extreme":
         return plan(with_extra=True, with_bulk=True)
     years = list(paths.YEARS[-2:]) if tier == "lite" else None
-    return plan(only=sorted(tier_groups(tier)), years=years,
-                with_extra=True, with_bulk=True)
+    return plan(only=sorted(tier_groups(tier)), years=years, with_extra=True, with_bulk=True)
 
 
 # ---------------------------------------------------------------- manifest
@@ -285,14 +450,16 @@ def human(n: float) -> str:
     return f"{n:.1f}GB"
 
 
-def http_get(url: str, dest: pathlib.Path, retries: int = 7, timeout: int = 180,
-             since: str | None = None) -> tuple[int, str] | None:
+def http_get(
+    url: str, dest: pathlib.Path, retries: int = 7, timeout: int = 180, since: str | None = None
+) -> tuple[int, str] | None:
     """Download atomically. Returns (bytes, last_modified) or None on HTTP 304."""
-    import urllib.request   # lazy: read-only commands never download
+    import urllib.request  # lazy: read-only commands never download
+
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_name(dest.name + ".part")
     if tmp.exists():
-        tmp.unlink()                       # start clean; resume only within this call
+        tmp.unlink()  # start clean; resume only within this call
     last: Exception | None = None
     lm = ""
     failures = 0
@@ -303,19 +470,19 @@ def http_get(url: str, dest: pathlib.Path, retries: int = 7, timeout: int = 180,
             if since:
                 headers["If-Modified-Since"] = since
             if have:
-                headers["Range"] = f"bytes={have}-"   # resume a truncated download
+                headers["Range"] = f"bytes={have}-"  # resume a truncated download
             req = urllib.request.Request(url, headers=headers)
             with _host_slot(url), urllib.request.urlopen(req, timeout=timeout) as resp:
                 if resp.status == 304:
                     return None
                 partial = resp.status == 206
                 if not partial:
-                    have = 0                 # server ignored Range: restart from scratch
+                    have = 0  # server ignored Range: restart from scratch
                 with tmp.open("ab" if partial else "wb") as out:
                     shutil.copyfileobj(resp, out, length=1 << 20)
                 lm = resp.headers.get("Last-Modified") or lm
                 total = None
-                cr = resp.headers.get("Content-Range")       # "bytes X-Y/TOTAL"
+                cr = resp.headers.get("Content-Range")  # "bytes X-Y/TOTAL"
                 if cr and "/" in cr and cr.rsplit("/", 1)[-1].isdigit():
                     total = int(cr.rsplit("/", 1)[-1])
                 elif resp.headers.get("Content-Length") is not None:
@@ -332,11 +499,11 @@ def http_get(url: str, dest: pathlib.Path, retries: int = 7, timeout: int = 180,
             if exc.code == 304:
                 return None
             if exc.code == 416 and tmp.exists():
-                tmp.unlink()                 # range unsatisfiable: our .part is stale
+                tmp.unlink()  # range unsatisfiable: our .part is stale
             last = exc
             failures += 1
         except Exception as exc:  # noqa: BLE001
-            last = exc                       # keep .part: a truncation only grows toward total
+            last = exc  # keep .part: a truncation only grows toward total
             # a reset mid-stream that still moved bytes is progress, not a failure
             # (NVD drops long transfers); the file size bounds how often this repeats
             grew = tmp.exists() and tmp.stat().st_size > start
@@ -344,7 +511,7 @@ def http_get(url: str, dest: pathlib.Path, retries: int = 7, timeout: int = 180,
         if failures < retries:
             time.sleep(min(2 ** max(failures, 1), 30) + random.uniform(0, 2))
     if tmp.exists():
-        tmp.unlink()                         # give up cleanly; never leave a partial behind
+        tmp.unlink()  # give up cleanly; never leave a partial behind
     raise RuntimeError(f"download failed: {url}: {last}")
 
 
@@ -353,6 +520,7 @@ def http_date(iso: str | None) -> str | None:
         return None
     import datetime as _dt
     import email.utils
+
     try:
         dt = _dt.datetime.strptime(iso, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=_dt.timezone.utc)
     except ValueError:
@@ -362,12 +530,15 @@ def http_date(iso: str | None) -> str | None:
 
 APPLE_ROWS = re.compile(
     r'<a href="(https://support\.apple\.com/en-us/\d+)"[^>]*>([^<]+)</a>.*?'
-    r'<td[^>]*><p[^>]*>(.*?)</p></td>\s*<td[^>]*><p[^>]*>([^<]*)</p></td>', re.S)
+    r"<td[^>]*><p[^>]*>(.*?)</p></td>\s*<td[^>]*><p[^>]*>([^<]*)</p></td>",
+    re.S,
+)
 
 
 def http_text(url: str, timeout: int = 60, retries: int = 4) -> str:
     import http.client
     import urllib.request
+
     req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept-Encoding": "identity"})
     for attempt in range(retries):
         try:
@@ -377,7 +548,7 @@ def http_text(url: str, timeout: int = 60, retries: int = 4) -> str:
             # a 4xx will not change on retry; resets, truncations and 5xx often do
             if attempt == retries - 1 or (isinstance(exc, urllib.error.HTTPError) and exc.code < 500):
                 raise
-            time.sleep(2 ** attempt + random.uniform(0, 1))
+            time.sleep(2**attempt + random.uniform(0, 1))
     raise AssertionError("unreachable")
 
 
@@ -396,6 +567,7 @@ def msrc_fetch(dest: pathlib.Path) -> int:
 
 def apple_fetch(dest: pathlib.Path) -> int:
     import concurrent.futures as cf
+
     html = http_text("https://support.apple.com/en-us/100100")
     dest.mkdir(parents=True, exist_ok=True)
     (dest / "index.html").write_text(html)
@@ -407,23 +579,25 @@ def apple_fetch(dest: pathlib.Path) -> int:
         if not page.exists():
             todo.append((url, page))
     with cf.ThreadPoolExecutor(max_workers=6) as pool:
+
         def grab(pair):
             url, page = pair
             try:
                 page.write_text(http_text(url))
             except Exception:  # noqa: BLE001
                 pass
+
         list(pool.map(grab, todo))
     return sum(f.stat().st_size for f in dest.rglob("*") if f.is_file())
 
 
-def git_clone(url: str, dest: pathlib.Path, pull: bool = False,
-              sparse: str | None = None) -> str:
+def git_clone(url: str, dest: pathlib.Path, pull: bool = False, sparse: str | None = None) -> str:
     if (dest / ".git").exists():
         if not pull:
             return "exists"
-        res = subprocess.run(["git", "-C", str(dest), "pull", "--ff-only", "--depth", "1"],
-                             capture_output=True, text=True)
+        res = subprocess.run(
+            ["git", "-C", str(dest), "pull", "--ff-only", "--depth", "1"], capture_output=True, text=True
+        )
         return "pulled" if res.returncode == 0 else "exists"
     dest.parent.mkdir(parents=True, exist_ok=True)
     if dest.exists() and not any(dest.iterdir()):
@@ -439,8 +613,9 @@ def git_clone(url: str, dest: pathlib.Path, pull: bool = False,
     cmd += [url, str(target)]
     res = subprocess.run(cmd, capture_output=True, text=True)
     if res.returncode == 0 and sparse:
-        subprocess.run(["git", "-C", str(target), "sparse-checkout", "set", sparse],
-                       capture_output=True, text=True)
+        subprocess.run(
+            ["git", "-C", str(target), "sparse-checkout", "set", sparse], capture_output=True, text=True
+        )
     if res.returncode != 0:
         tail = (res.stderr or res.stdout).strip().splitlines()[-1:] or ["git clone failed"]
         raise RuntimeError(f"{url}: {tail[0]}")
@@ -455,8 +630,7 @@ def git_head(dest: pathlib.Path) -> str:
     recorded for provenance. (We fetch a mutable branch tip rather than a
     pinned commit: full pinning needs curated per-repo SHAs + verification
     infra, so this records what was fetched, it does not attest it.)"""
-    res = subprocess.run(["git", "-C", str(dest), "rev-parse", "HEAD"],
-                         capture_output=True, text=True)
+    res = subprocess.run(["git", "-C", str(dest), "rev-parse", "HEAD"], capture_output=True, text=True)
     return res.stdout.strip() if res.returncode == 0 else ""
 
 
@@ -470,7 +644,7 @@ def mirror_one(d: Dataset, entry: dict, base: str, manifest: dict, force: bool =
     dl = d.path.with_name(d.path.name + ".mirror")
     new = d.path.with_name(d.path.name + ".new")
     try:
-        http_get(url, dl, retries=2)        # a cache: give up fast, upstream retries fully
+        http_get(url, dl, retries=2)  # a cache: give up fast, upstream retries fully
         if sha256(dl) != entry["sha256"]:
             raise RuntimeError(f"{url}: sha256 does not match the mirror manifest")
         if entry.get("dir"):
@@ -481,7 +655,7 @@ def mirror_one(d: Dataset, entry: dict, base: str, manifest: dict, force: bool =
             if d.path.exists():
                 shutil.rmtree(d.path)
             new.replace(d.path)
-            digest = ""                      # verify hashes files; a dir has no single hash
+            digest = ""  # verify hashes files; a dir has no single hash
         else:
             dl.replace(d.path)
             digest = entry["sha256"]
@@ -490,19 +664,34 @@ def mirror_one(d: Dataset, entry: dict, base: str, manifest: dict, force: bool =
         shutil.rmtree(new, ignore_errors=True)
     size = entry.get("bytes") or d.path.stat().st_size
     manifest["datasets"][d.name] = {
-        "group": d.group, "url": url, "path": d.dest, "bytes": size,
-        "sha256": digest, "mirror_sha256": entry["sha256"], "tier": d.tier,
+        "group": d.group,
+        "url": url,
+        "path": d.dest,
+        "bytes": size,
+        "sha256": digest,
+        "mirror_sha256": entry["sha256"],
+        "tier": d.tier,
         # when the mirror fetched it upstream: keeps If-Modified-Since honest later
-        "fetched_at": entry.get("fetched_at")
-        or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "http_last_modified": "", "note": d.note,
+        "fetched_at": entry.get("fetched_at") or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "http_last_modified": "",
+        "note": d.note,
     }
-    return {"name": d.name, "status": "ok", "bytes": size, "via": "mirror",
-            "secs": round(time.time() - started, 1)}
+    return {
+        "name": d.name,
+        "status": "ok",
+        "bytes": size,
+        "via": "mirror",
+        "secs": round(time.time() - started, 1),
+    }
 
 
-def sync_one(d: Dataset, manifest: dict, force: bool = False, pull: bool = False,
-             mirror: tuple[str, dict] | None = None) -> dict:
+def sync_one(
+    d: Dataset,
+    manifest: dict,
+    force: bool = False,
+    pull: bool = False,
+    mirror: tuple[str, dict] | None = None,
+) -> dict:
     rec = manifest["datasets"].get(d.name, {})
     if mirror and d.name in mirror[1]:
         try:
@@ -526,8 +715,7 @@ def sync_one(d: Dataset, manifest: dict, force: bool = False, pull: bool = False
             if state in ("exists", "pulled") and not force:
                 if head and d.name in manifest["datasets"]:
                     manifest["datasets"][d.name]["sha256"] = head  # record commit
-                return {"name": d.name, "status": state, "bytes": rec.get("bytes", 0),
-                        "commit": head[:12]}
+                return {"name": d.name, "status": state, "bytes": rec.get("bytes", 0), "commit": head[:12]}
             size = sum(f.stat().st_size for f in d.path.rglob("*") if f.is_file())
             digest = head
         else:
@@ -536,29 +724,39 @@ def sync_one(d: Dataset, manifest: dict, force: bool = False, pull: bool = False
             # can't attest authenticity, only make version drift visible.
             if d.path.exists() and not force and rec.get("sha256") and sha256(d.path) == rec["sha256"]:
                 return {"name": d.name, "status": "same", "bytes": d.path.stat().st_size}
-            got = http_get(d.url, d.path,
-                           since=None if force else http_date(rec.get("fetched_at")))
+            got = http_get(d.url, d.path, since=None if force else http_date(rec.get("fetched_at")))
             if got is None:
                 return {"name": d.name, "status": "same", "bytes": d.path.stat().st_size}
             size, lm = got
             digest = sha256(d.path)
             drift = bool(rec.get("sha256")) and rec["sha256"] != digest
         manifest["datasets"][d.name] = {
-            "group": d.group, "url": d.url, "path": d.dest, "bytes": size,
-            "sha256": digest, "tier": d.tier,
+            "group": d.group,
+            "url": d.url,
+            "path": d.dest,
+            "bytes": size,
+            "sha256": digest,
+            "tier": d.tier,
             "fetched_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "http_last_modified": lm,
             "note": d.note,
         }
-        return {"name": d.name, "status": "ok", "bytes": size, "changed": drift,
-                "secs": round(time.time() - started, 1)}
+        return {
+            "name": d.name,
+            "status": "ok",
+            "bytes": size,
+            "changed": drift,
+            "secs": round(time.time() - started, 1),
+        }
     except Exception as exc:  # noqa: BLE001
         return {"name": d.name, "status": "FAIL", "error": str(exc)[:300]}
 
 
-def sync(items: list[Dataset], force: bool = False, jobs: int = 4,
-         pull: bool = False, progress=None) -> list[dict]:
+def sync(
+    items: list[Dataset], force: bool = False, jobs: int = 4, pull: bool = False, progress=None
+) -> list[dict]:
     import concurrent.futures as cf
+
     manifest = load_manifest()
     results: list[dict] = []
     mirror = None
@@ -596,24 +794,38 @@ def pack(out: pathlib.Path) -> dict:
         else:
             dst = out / name
             shutil.copyfile(src, dst)
-        entries[name] = {"file": dst.name, "sha256": sha256(dst), "bytes": dst.stat().st_size,
-                         "dir": src.is_dir(), "fetched_at": rec.get("fetched_at")}
-    doc = {"crowbar": _V, "generated": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-           "datasets": entries}
+        entries[name] = {
+            "file": dst.name,
+            "sha256": sha256(dst),
+            "bytes": dst.stat().st_size,
+            "dir": src.is_dir(),
+            "fetched_at": rec.get("fetched_at"),
+        }
+    doc = {
+        "crowbar": _V,
+        "generated": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "datasets": entries,
+    }
     (out / "manifest.json").write_text(json.dumps(doc, indent=2, sort_keys=True) + "\n")
     return doc
 
 
 def freshness(manifest: dict | None = None) -> dict[str, dict]:
     m = manifest or load_manifest()
-    return {k: {"fetched_at": v.get("fetched_at"), "bytes": v.get("bytes"),
-                "path": v.get("path"), "tier": v.get("tier", "core")}
-            for k, v in sorted(m.get("datasets", {}).items())}
+    return {
+        k: {
+            "fetched_at": v.get("fetched_at"),
+            "bytes": v.get("bytes"),
+            "path": v.get("path"),
+            "tier": v.get("tier", "core"),
+        }
+        for k, v in sorted(m.get("datasets", {}).items())
+    }
 
 
 # ---------------------------------------------------------------- index age
-REFRESH_AFTER_DAYS = 1   # background refresh once the index is a day old
-STALE_AFTER_DAYS = 7     # NVD's modified feed covers 8 days; older means a gap
+REFRESH_AFTER_DAYS = 1  # background refresh once the index is a day old
+STALE_AFTER_DAYS = 7  # NVD's modified feed covers 8 days; older means a gap
 
 
 def index_status(meta: dict | None = None) -> dict:
@@ -630,17 +842,19 @@ def index_status(meta: dict | None = None) -> dict:
     last = max(filter(None, (meta.get("updated_at"), meta.get("built_at"))), default=None)
     age = None
     if last:
-        age = round((time.time() - calendar.timegm(time.strptime(last, "%Y-%m-%dT%H:%M:%SZ")))
-                    / 86400, 1)
+        age = round((time.time() - calendar.timegm(time.strptime(last, "%Y-%m-%dT%H:%M:%SZ"))) / 86400, 1)
     try:
         last_error = json.loads((paths.INDEX / "update.err").read_text())
     except (OSError, ValueError):
         last_error = None
-    return {"last_update": last, "age_days": age,
-            "stale": age is not None and age > STALE_AFTER_DAYS,
-            "tier": load_manifest().get("tier"),
-            "auto_update": not os.environ.get("CROWBAR_NO_AUTO_UPDATE"),
-            "last_error": last_error}
+    return {
+        "last_update": last,
+        "age_days": age,
+        "stale": age is not None and age > STALE_AFTER_DAYS,
+        "tier": load_manifest().get("tier"),
+        "auto_update": not os.environ.get("CROWBAR_NO_AUTO_UPDATE"),
+        "last_error": last_error,
+    }
 
 
 def note_update(error: str | None) -> None:
@@ -650,13 +864,14 @@ def note_update(error: str | None) -> None:
         if error is None:
             err.unlink(missing_ok=True)
         else:
-            err.write_text(json.dumps({"at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                                       "error": error[:500]}))
-    except OSError:   # read-only index
+            err.write_text(
+                json.dumps({"at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "error": error[:500]})
+            )
+    except OSError:  # read-only index
         pass
 
 
-_held: list = []   # this process's open lock file; closing it releases the lock
+_held: list = []  # this process's open lock file; closing it releases the lock
 
 
 def _flock(f) -> bool:
@@ -678,7 +893,7 @@ def acquire_update_lock() -> bool:
     try:
         paths.INDEX.mkdir(parents=True, exist_ok=True)
         f = open(paths.INDEX / "update.lock", "a")
-    except OSError:   # read-only index: nothing can write it, so there is nothing to guard
+    except OSError:  # read-only index: nothing can write it, so there is nothing to guard
         return True
     if not _flock(f):
         f.close()
@@ -716,7 +931,7 @@ def refresh_in_background(status: dict | None = None) -> bool:
     lock = paths.INDEX / "update.lock"
     if lock.exists() and time.time() - lock.stat().st_mtime < 3600:
         return False
-    if update_running():   # an update past the hour is still writing
+    if update_running():  # an update past the hour is still writing
         return False
     try:
         lock.touch()
@@ -726,7 +941,13 @@ def refresh_in_background(status: dict | None = None) -> bool:
     pkg = str(pathlib.Path(__file__).resolve().parents[1])
     env = dict(os.environ, PYTHONPATH=os.pathsep.join(filter(None, (pkg, os.environ.get("PYTHONPATH")))))
     with open(paths.INDEX / "update.log", "ab") as log:
-        subprocess.Popen([sys.executable, "-m", "crowbar.cli", "update", "--quiet", "--if-mounted"],
-                         stdin=subprocess.DEVNULL, stdout=log, stderr=log, env=env,
-                         cwd=pkg, start_new_session=True)
+        subprocess.Popen(
+            [sys.executable, "-m", "crowbar.cli", "update", "--quiet", "--if-mounted"],
+            stdin=subprocess.DEVNULL,
+            stdout=log,
+            stderr=log,
+            env=env,
+            cwd=pkg,
+            start_new_session=True,
+        )
     return True

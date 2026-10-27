@@ -47,6 +47,8 @@ jobs:
         run: python -m tests.test_unit
       - name: Schema-v3 adapter tests
         run: python -m tests.test_v3
+      - name: Write and read path tests
+        run: python -m tests.test_r1_write && python -m tests.test_r1_read
       - name: CLI smoke
         run: ./bin/crowbar --help >/dev/null
 

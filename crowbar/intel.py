@@ -4,20 +4,20 @@ Everything here treats the downloaded archives as inert data.  No repository,
 PoC, notebook, Makefile, or installer is executed.  Loaders are deterministic
 and idempotent so an interrupted build/update can simply be run again.
 """
+
 from __future__ import annotations
 
 import hashlib
 import json
 import pathlib
-import re
 import sqlite3
 import tarfile
 import time
 
-from . import datasets, paths
+from . import datasets, loaders, paths
+from .loaders import CVE_RE
 
 BATCH = 1500
-CVE_RE = re.compile(r"^CVE-\d{4}-\d{4,7}$", re.I)
 
 
 def _now() -> str:
@@ -25,9 +25,7 @@ def _now() -> str:
 
 
 def _norm(value: str | None, limit: int = 6000) -> str:
-    if not value:
-        return ""
-    return re.sub(r"\s+", " ", str(value)).strip()[:limit]
+    return loaders.norm(value, limit)
 
 
 def _sha256(path: pathlib.Path) -> str:
@@ -64,9 +62,19 @@ def source_meta(name: str, default_license: str = "", path: pathlib.Path | None 
     }
 
 
-def record_source(con: sqlite3.Connection, source: str, *, path: pathlib.Path | None = None,
-                  url: str = "", license: str = "", sha256: str = "", fetched_at: str = "",
-                  count: int = 0, status: str = "loaded", note: str = "") -> None:
+def record_source(
+    con: sqlite3.Connection,
+    source: str,
+    *,
+    path: pathlib.Path | None = None,
+    url: str = "",
+    license: str = "",
+    sha256: str = "",
+    fetched_at: str = "",
+    count: int = 0,
+    status: str = "loaded",
+    note: str = "",
+) -> None:
     rel = ""
     if path:
         try:
@@ -82,6 +90,12 @@ def record_source(con: sqlite3.Connection, source: str, *, path: pathlib.Path | 
 
 
 # ---------------------------------------------------------------- schema
+# OR REPLACE: a feed that lists one CVE twice hits the same rowid twice.
+# rowid = year*1e8 + seq (indexer.FTS_ROWID_SQL): deterministic, so deletes address rows by rowid
+FTS_INSERT = (
+    "INSERT OR REPLACE INTO cve_fts(rowid,id,description,products) VALUES "
+    "(CAST(substr(?1,5,4) AS INTEGER)*100000000+CAST(substr(?1,10) AS INTEGER),?1,?2,?3)"
+)
 V3_SCHEMA = """
 CREATE TABLE IF NOT EXISTS cve_cna(
   cve_id TEXT PRIMARY KEY,
@@ -93,11 +107,11 @@ CREATE TABLE IF NOT EXISTS cve_cna(
 CREATE TABLE IF NOT EXISTS cve_cna_ref(
   cve_id TEXT, url TEXT, tags TEXT,
   PRIMARY KEY(cve_id, url)
-);
+) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS cve_cna_product(
   cve_id TEXT, vendor TEXT, product TEXT,
   PRIMARY KEY(cve_id, vendor, product)
-);
+) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS cve_cna_cwe(
   cve_id TEXT, cwe TEXT,
   PRIMARY KEY(cve_id, cwe)
@@ -117,7 +131,7 @@ CREATE TABLE IF NOT EXISTS poc_orphan(cve_id TEXT PRIMARY KEY, count INTEGER);
 CREATE TABLE IF NOT EXISTS cve_alias(
   cve_id TEXT, alias TEXT, source TEXT,
   PRIMARY KEY(cve_id, alias, source)
-);
+) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS source_state(
   source TEXT PRIMARY KEY, url TEXT, path TEXT, license TEXT, sha256 TEXT,
   fetched_at TEXT, loaded_at TEXT, record_count INTEGER, status TEXT, note TEXT
@@ -133,32 +147,22 @@ CREATE INDEX IF NOT EXISTS cve_alias_alias ON cve_alias(alias);
 
 
 def migrate(con: sqlite3.Connection, progress=None) -> None:
-    """Upgrade a v2 index in place.  Safe to call repeatedly."""
+    """Upgrade a v2 index to v3 in place (scripts/merge_p0.py).  v3 -> v4 needs `crowbar build`."""
     con.executescript(V3_SCHEMA)
-    # Exact duplicate CPE rows were an audit finding.  Deduplicate before the
-    # unique index is created so the migration cannot fail on existing data.
+    # Exact duplicate CPE rows were an audit finding.
     dedupe = (
         ("cve_cwe", "cve_id,cwe"),
         ("cve_product", "cve_id,vendor,product"),
-        ("cpe_match", "cve_id,part,vendor,product,version,"
-                      "v_start_incl,v_start_excl,v_end_incl,v_end_excl"),
+        ("cpe_match", "cve_id,part,vendor,product,version,v_start_incl,v_start_excl,v_end_incl,v_end_excl"),
         ("cve_ref", "cve_id,url"),
     )
     for table, cols in dedupe:
         con.execute(
-            f"DELETE FROM {table} WHERE rowid NOT IN "
-            f"(SELECT min(rowid) FROM {table} GROUP BY {cols})"
+            f"DELETE FROM {table} WHERE rowid NOT IN (SELECT min(rowid) FROM {table} GROUP BY {cols})"
         )
-    con.executescript("""
-CREATE UNIQUE INDEX IF NOT EXISTS cve_cwe_unique ON cve_cwe(cve_id,cwe);
-CREATE UNIQUE INDEX IF NOT EXISTS cve_product_unique ON cve_product(cve_id,vendor,product);
-CREATE UNIQUE INDEX IF NOT EXISTS cpe_match_unique ON cpe_match(
-  cve_id,part,vendor,product,version,v_start_incl,v_start_excl,v_end_incl,v_end_excl);
-CREATE UNIQUE INDEX IF NOT EXISTS cve_ref_unique ON cve_ref(cve_id,url);
-""")
     rebuild_cve_meta(con)
     stub_missing_cwes(con)
-    con.execute("INSERT OR REPLACE INTO meta VALUES ('schema',?)", (str(paths.SCHEMA_VERSION),))
+    con.execute("INSERT OR REPLACE INTO meta VALUES ('schema','3')")
     con.commit()
     if progress:
         progress("schema v3 migrated")
@@ -179,14 +183,20 @@ def _cna_metrics(cna: dict) -> tuple[float | None, str, str, str]:
             score = data.get("baseScore")
             if score is None:
                 continue
-            return (float(score), str(data.get("version") or ""),
-                    str(data.get("vectorString") or ""),
-                    str(data.get("baseSeverity") or "").upper())
+            return (
+                float(score),
+                str(data.get("version") or ""),
+                str(data.get("vectorString") or ""),
+                str(data.get("baseSeverity") or "").upper(),
+            )
         data = cna.get(key)
         if isinstance(data, dict) and data.get("baseScore") is not None:
-            return (float(data["baseScore"]), str(data.get("version") or ""),
-                    str(data.get("vectorString") or ""),
-                    str(data.get("baseSeverity") or "").upper())
+            return (
+                float(data["baseScore"]),
+                str(data.get("version") or ""),
+                str(data.get("vectorString") or ""),
+                str(data.get("baseSeverity") or "").upper(),
+            )
     return (None, "", "", "")
 
 
@@ -215,7 +225,7 @@ def parse_cveorg(doc: dict | list) -> dict | None:
         return None
     meta = doc.get("cveMetadata") or {}
     cid = (meta.get("cveId") or "").upper()
-    if not CVE_RE.match(cid):
+    if not CVE_RE.fullmatch(cid):
         return None
     cna = (doc.get("containers") or {}).get("cna") or {}
     desc = ""
@@ -259,20 +269,32 @@ def parse_cveorg(doc: dict | list) -> dict | None:
 
     return {
         "id": cid,
-        "assigner": _norm(meta.get("assignerShortName")
-                          or (cna.get("providerMetadata") or {}).get("shortName"), 200),
+        "assigner": _norm(
+            meta.get("assignerShortName") or (cna.get("providerMetadata") or {}).get("shortName"), 200
+        ),
         "state": str(meta.get("state") or "").upper(),
         "published": meta.get("datePublished") or "",
         "updated": meta.get("dateUpdated") or "",
         "title": title,
         "description": desc,
-        "cvss": score, "cvss_version": version, "cvss_vector": vector, "severity": severity,
-        "cwes": cwes[:80], "products": products, "refs": refs[:60],
+        "cvss": score,
+        "cvss_version": version,
+        "cvss_vector": vector,
+        "severity": severity,
+        "cwes": cwes[:80],
+        "products": products,
+        "refs": refs[:60],
     }
 
 
-def load_cveorg(path: pathlib.Path, con: sqlite3.Connection, *, epss: dict | None = None,
-                kev_ids: set[str] | None = None, progress=None) -> int:
+def load_cveorg(
+    path: pathlib.Path,
+    con: sqlite3.Connection,
+    *,
+    epss: dict | None = None,
+    kev_ids: set[str] | None = None,
+    progress=None,
+) -> int:
     if not path.exists():
         return 0
     src = source_meta("cveorg-cvelist", "MIT", path)
@@ -304,12 +326,15 @@ def load_cveorg(path: pathlib.Path, con: sqlite3.Connection, *, epss: dict | Non
                 "INSERT OR REPLACE INTO cve_cna(cve_id,assigner,state,published,updated,"
                 "title,description,cvss,cvss_version,cvss_vector,severity,record_path,source,"
                 "source_url,source_sha256,fetched_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                cna_rows)
+                cna_rows,
+            )
         if cve_rows:
             con.executemany(
                 "INSERT OR IGNORE INTO cve(id,published,modified,status,description,cvss,"
                 "cvss_version,cvss_vector,severity,kev,epss,epss_pct,year) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", cve_rows)
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                cve_rows,
+            )
         if cwe_rows:
             con.executemany("INSERT OR IGNORE INTO cve_cwe VALUES (?,?)", cwe_rows)
         if prod_rows:
@@ -319,18 +344,27 @@ def load_cveorg(path: pathlib.Path, con: sqlite3.Connection, *, epss: dict | Non
         if cna_ref_rows:
             con.executemany("INSERT OR IGNORE INTO cve_cna_ref VALUES (?,?,?)", cna_ref_rows)
         if cna_prod_rows:
-            con.executemany("INSERT OR IGNORE INTO cve_cna_product VALUES (?,?,?)",
-                            cna_prod_rows)
+            con.executemany("INSERT OR IGNORE INTO cve_cna_product VALUES (?,?,?)", cna_prod_rows)
         if fts_rows:
-            con.executemany("INSERT INTO cve_fts(id,description,products) VALUES (?,?,?)",
-                            fts_rows)
+            con.executemany(FTS_INSERT, fts_rows)
         if meta_rows:
             con.executemany(
                 "INSERT INTO cve_meta(cve_id,published_year,cve_year) VALUES (?,?,?) "
                 "ON CONFLICT(cve_id) DO UPDATE SET published_year=excluded.published_year,"
-                " cve_year=excluded.cve_year", meta_rows)
-        (cna_rows, cve_rows, cwe_rows, prod_rows, ref_rows, fts_rows, meta_rows,
-         cna_ref_rows, cna_prod_rows) = ([], [], [], [], [], [], [], [], [])
+                " cve_year=excluded.cve_year",
+                meta_rows,
+            )
+        (
+            cna_rows,
+            cve_rows,
+            cwe_rows,
+            prod_rows,
+            ref_rows,
+            fts_rows,
+            meta_rows,
+            cna_ref_rows,
+            cna_prod_rows,
+        ) = ([], [], [], [], [], [], [], [], [])
 
     with tarfile.open(path, "r:gz") as tf:
         for member in tf:
@@ -354,10 +388,26 @@ def load_cveorg(path: pathlib.Path, con: sqlite3.Connection, *, epss: dict | Non
                 year = int(cid.split("-")[1])
                 pub_year = int(p["published"][:4]) if p["published"][:4].isdigit() else None
                 e, pct = epss.get(cid, (None, None))
-                cna_rows.append((cid, p["assigner"], p["state"], p["published"], p["updated"],
-                                 p["title"], p["description"], p["cvss"], p["cvss_version"],
-                                 p["cvss_vector"], p["severity"], member.name, "cveorg",
-                                 src["url"], src["sha256"], fetched))
+                cna_rows.append(
+                    (
+                        cid,
+                        p["assigner"],
+                        p["state"],
+                        p["published"],
+                        p["updated"],
+                        p["title"],
+                        p["description"],
+                        p["cvss"],
+                        p["cvss_version"],
+                        p["cvss_vector"],
+                        p["severity"],
+                        member.name,
+                        "cveorg",
+                        src["url"],
+                        src["sha256"],
+                        fetched,
+                    )
+                )
                 meta_rows.append((cid, pub_year, year))
                 for w in p["cwes"]:
                     cwe_rows.append((cid, w))
@@ -368,18 +418,36 @@ def load_cveorg(path: pathlib.Path, con: sqlite3.Connection, *, epss: dict | Non
                 if cid not in existing and p["state"] == "PUBLISHED":
                     existing.add(cid)
                     inserted += 1
-                    cve_rows.append((cid, p["published"], p["updated"] or p["published"],
-                                     "Published", p["description"], p["cvss"], p["cvss_version"],
-                                     p["cvss_vector"], p["severity"], 1 if cid in kev_ids else 0,
-                                     e, pct, pub_year or year))
+                    cve_rows.append(
+                        (
+                            cid,
+                            p["published"],
+                            p["updated"] or p["published"],
+                            "Published",
+                            p["description"],
+                            p["cvss"],
+                            p["cvss_version"],
+                            p["cvss_vector"],
+                            p["severity"],
+                            1 if cid in kev_ids else 0,
+                            e,
+                            pct,
+                            pub_year or year,
+                        )
+                    )
                     # A CVE that NVD never carried has no NVD refs/products, so its
                     # CNA data is the only copy -> promote it into the shared tables.
                     for vendor, product in p["products"]:
                         prod_rows.append((cid, vendor, product))
                     for url, tags in p["refs"]:
                         ref_rows.append((cid, url, tags))
-                    fts_rows.append((cid, p["description"][:4000],
-                                     " ".join(f"{v} {pr}" for v, pr in p["products"])[:4000]))
+                    fts_rows.append(
+                        (
+                            cid,
+                            p["description"][:4000],
+                            " ".join(f"{v} {pr}" for v, pr in p["products"])[:4000],
+                        )
+                    )
             if len(cna_rows) >= BATCH:
                 flush()
                 if progress and records % 20000 == 0:
@@ -387,10 +455,17 @@ def load_cveorg(path: pathlib.Path, con: sqlite3.Connection, *, epss: dict | Non
 
     flush()
     rebuild_cve_meta(con)
-    record_source(con, "cveorg-cvelist", path=path, url=src["url"],
-                  license=src["license"], sha256=src["sha256"], fetched_at=fetched,
-                  count=records,
-                  note=f"{inserted} CVE rows inserted; {len(ref_rows)} CNA refs in last batch")
+    record_source(
+        con,
+        "cveorg-cvelist",
+        path=path,
+        url=src["url"],
+        license=src["license"],
+        sha256=src["sha256"],
+        fetched_at=fetched,
+        count=records,
+        note=f"{inserted} CVE rows inserted; {len(ref_rows)} CNA refs in last batch",
+    )
     con.commit()
     if progress:
         progress(f"CVE List {records} records, {inserted} new CVEs")
@@ -414,7 +489,8 @@ def load_poc_github(path: pathlib.Path, con: sqlite3.Connection, progress=None) 
             con.executemany(
                 "INSERT OR IGNORE INTO poc(source,cve_id,repo,url,repo_id,stars,language,"
                 "created_at,pushed_at,description,fetched_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-                rows)
+                rows,
+            )
             rows = []
 
     with tarfile.open(path, "r:gz") as tf:
@@ -422,7 +498,7 @@ def load_poc_github(path: pathlib.Path, con: sqlite3.Connection, progress=None) 
             if not member.isfile() or not member.name.endswith(".json"):
                 continue
             name = member.name.rsplit("/", 1)[-1][:-5]
-            if not CVE_RE.match(name):
+            if not CVE_RE.fullmatch(name):
                 continue
             fh = tf.extractfile(member)
             if fh is None:
@@ -440,15 +516,21 @@ def load_poc_github(path: pathlib.Path, con: sqlite3.Connection, progress=None) 
                 url = str(repo.get("html_url") or "").strip()
                 if not url:
                     continue
-                rows.append((
-                    "poc-in-github", name.upper(),
-                    _norm(repo.get("full_name"), 300), url,
-                    repo.get("id") if isinstance(repo.get("id"), int) else None,
-                    repo.get("stargazers_count") if isinstance(repo.get("stargazers_count"), int) else 0,
-                    _norm(repo.get("language"), 100),
-                    repo.get("created_at") or "", repo.get("pushed_at") or "",
-                    _norm(repo.get("description"), 500), fetched,
-                ))
+                rows.append(
+                    (
+                        "poc-in-github",
+                        name.upper(),
+                        _norm(repo.get("full_name"), 300),
+                        url,
+                        repo.get("id") if isinstance(repo.get("id"), int) else None,
+                        repo.get("stargazers_count") if isinstance(repo.get("stargazers_count"), int) else 0,
+                        _norm(repo.get("language"), 100),
+                        repo.get("created_at") or "",
+                        repo.get("pushed_at") or "",
+                        _norm(repo.get("description"), 500),
+                        fetched,
+                    )
+                )
                 added += 1
                 if len(rows) >= BATCH * 2:
                     flush()
@@ -458,16 +540,25 @@ def load_poc_github(path: pathlib.Path, con: sqlite3.Connection, progress=None) 
     con.execute("DELETE FROM poc_orphan")
     con.execute(
         "INSERT INTO poc_orphan(cve_id,count) SELECT p.cve_id,count(*) FROM poc p "
-        "WHERE NOT EXISTS(SELECT 1 FROM cve c WHERE c.id=p.cve_id) GROUP BY p.cve_id")
+        "WHERE NOT EXISTS(SELECT 1 FROM cve c WHERE c.id=p.cve_id) GROUP BY p.cve_id"
+    )
     con.execute("UPDATE cve_meta SET has_poc=0, poc_count=0")
     # one grouped pass; a correlated count per row is quadratic before poc_cve exists
     con.execute(
         "UPDATE cve_meta SET has_poc=1, poc_count=p.n FROM "
-        "(SELECT cve_id, count(*) n FROM poc GROUP BY cve_id) p WHERE p.cve_id=cve_meta.cve_id")
-    record_source(con, "poc-in-github", path=path, url=src["url"],
-                  license=src["license"], sha256=src["sha256"], fetched_at=fetched,
-                  count=added,
-                  note=f"{files} CVE files parsed; repo metadata only, no code executed")
+        "(SELECT cve_id, count(*) n FROM poc GROUP BY cve_id) p WHERE p.cve_id=cve_meta.cve_id"
+    )
+    record_source(
+        con,
+        "poc-in-github",
+        path=path,
+        url=src["url"],
+        license=src["license"],
+        sha256=src["sha256"],
+        fetched_at=fetched,
+        count=added,
+        note=f"{files} CVE files parsed; repo metadata only, no code executed",
+    )
     con.commit()
     if progress:
         progress(f"PoC-in-GitHub {files} files, {added} repos")
@@ -478,15 +569,15 @@ def load_poc_github(path: pathlib.Path, con: sqlite3.Connection, progress=None) 
 def rebuild_cve_meta(con: sqlite3.Connection) -> int:
     con.execute(
         "INSERT OR IGNORE INTO cve_meta(cve_id,published_year,cve_year) "
-        "SELECT id, NULL, CAST(substr(id,5,4) AS INTEGER) FROM cve")
+        "SELECT id, NULL, CAST(substr(id,5,4) AS INTEGER) FROM cve"
+    )
     con.execute(
         "UPDATE cve_meta SET published_year=CASE WHEN substr("
         "(SELECT published FROM cve WHERE cve.id=cve_meta.cve_id),1,4) GLOB '[0-9][0-9][0-9][0-9]' "
         "THEN CAST(substr((SELECT published FROM cve WHERE cve.id=cve_meta.cve_id),1,4) AS INTEGER) "
-        "ELSE NULL END WHERE published_year IS NULL")
-    con.execute(
-        "UPDATE cve_meta SET cve_year=CAST(substr(cve_id,5,4) AS INTEGER) "
-        "WHERE cve_year IS NULL")
+        "ELSE NULL END WHERE published_year IS NULL"
+    )
+    con.execute("UPDATE cve_meta SET cve_year=CAST(substr(cve_id,5,4) AS INTEGER) WHERE cve_year IS NULL")
     # Only CVEs that are actually in the index carry metadata rows; rejected or
     # reserved CVE List records stay in cve_cna alone.
     con.execute("DELETE FROM cve_meta WHERE cve_id NOT IN (SELECT id FROM cve)")
@@ -500,15 +591,15 @@ def stub_missing_cwes(con: sqlite3.Connection) -> int:
         "SELECT DISTINCT cwe,'Deprecated or withdrawn CWE '||cwe,'Unknown','Deprecated',"
         "'Referenced by CVE records but absent from the current CWE catalog; usually a "
         "deprecated CWE retained for historical mapping.' FROM cve_cwe "
-        "WHERE cwe NOT IN (SELECT id FROM cwe)")
+        "WHERE cwe NOT IN (SELECT id FROM cwe)"
+    )
     return con.execute("SELECT count(*) FROM cwe").fetchone()[0] - before
 
 
 def rebuild_aliases(con: sqlite3.Connection) -> int:
     con.execute("DELETE FROM cve_alias WHERE source='osv'")
     rows: list[tuple[str, str, str]] = []
-    for cve, aliases in con.execute(
-            "SELECT cve,aliases FROM advisory WHERE cve<>'' AND aliases<>''"):
+    for cve, aliases in con.execute("SELECT cve,aliases FROM advisory WHERE cve<>'' AND aliases<>''"):
         for alias in str(aliases).split(","):
             alias = alias.strip().upper()
             if alias and alias != cve and len(alias) <= 100:
@@ -521,8 +612,7 @@ def rebuild_aliases(con: sqlite3.Connection) -> int:
 
 def already_loaded(con: sqlite3.Connection, source: str, path: pathlib.Path) -> bool:
     """True when this exact archive was already loaded (idempotent skip)."""
-    row = con.execute(
-        "SELECT sha256, status FROM source_state WHERE source=?", (source,)).fetchone()
+    row = con.execute("SELECT sha256, status FROM source_state WHERE source=?", (source,)).fetchone()
     if not row or row[1] != "loaded" or not row[0]:
         return False
     if not path.exists():
@@ -530,9 +620,14 @@ def already_loaded(con: sqlite3.Connection, source: str, path: pathlib.Path) -> 
     return _sha256(path) == row[0]
 
 
-def load_all(con: sqlite3.Connection, *, epss: dict | None = None,
-             kev_ids: set[str] | None = None, progress=None,
-             force: bool = False) -> dict:
+def load_all(
+    con: sqlite3.Connection,
+    *,
+    epss: dict | None = None,
+    kev_ids: set[str] | None = None,
+    progress=None,
+    force: bool = False,
+) -> dict:
     """Load every staged v3 source that exists.  Missing files are skipped.
 
     Archives whose SHA-256 already matches `source_state` are skipped, so a
@@ -542,8 +637,7 @@ def load_all(con: sqlite3.Connection, *, epss: dict | None = None,
     cve_tar = paths.DATA / "intel/cveorg/cvelistV5-main.tar.gz"
     poc_tar = paths.DATA / "intel/poc-in-github/PoC-in-GitHub-master.tar.gz"
     if force or not already_loaded(con, "cveorg-cvelist", cve_tar):
-        counts["cveorg"] = load_cveorg(cve_tar, con, epss=epss, kev_ids=kev_ids,
-                                        progress=progress)
+        counts["cveorg"] = load_cveorg(cve_tar, con, epss=epss, kev_ids=kev_ids, progress=progress)
     else:
         counts["cveorg"] = 0
         if progress:

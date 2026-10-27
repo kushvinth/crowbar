@@ -13,6 +13,7 @@ existing NVD description or CVSS score: CNA data is stored side by side in
 The live index is never touched unless --promote is given, and the previous
 file is kept as index/crowbar.db.pre-p0 for rollback (scripts/rollback_index.sh).
 """
+
 from __future__ import annotations
 
 import argparse
@@ -28,9 +29,21 @@ sys.path.insert(0, str(ROOT))
 
 from crowbar import intel, paths  # noqa: E402
 
-TABLES = ("cve", "cve_cna", "cve_cna_ref", "cve_cna_product", "cve_meta", "poc",
-          "poc_orphan", "cve_alias", "source_state", "cve_cwe", "cve_product",
-          "cve_ref", "cpe_match")
+TABLES = (
+    "cve",
+    "cve_cna",
+    "cve_cna_ref",
+    "cve_cna_product",
+    "cve_meta",
+    "poc",
+    "poc_orphan",
+    "cve_alias",
+    "source_state",
+    "cve_cwe",
+    "cve_product",
+    "cve_ref",
+    "cpe_match",
+)
 
 
 def human(n: float) -> str:
@@ -57,8 +70,7 @@ def snapshot(con: sqlite3.Connection) -> dict:
         except sqlite3.DatabaseError:
             out[t] = None
     try:
-        out["schema"] = con.execute(
-            "SELECT value FROM meta WHERE key='schema'").fetchone()[0]
+        out["schema"] = con.execute("SELECT value FROM meta WHERE key='schema'").fetchone()[0]
     except sqlite3.DatabaseError:
         out["schema"] = "?"
     return out
@@ -76,11 +88,9 @@ def diff(before: dict, after: dict) -> list[tuple[str, int, int]]:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__,
-                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--work", help="index file to merge into (default: index/crowbar.db.p0)")
-    ap.add_argument("--promote", action="store_true",
-                    help="swap the merged file over index/crowbar.db")
+    ap.add_argument("--promote", action="store_true", help="swap the merged file over index/crowbar.db")
     ap.add_argument("--dry-run", action="store_true", help="print the plan and exit")
     ap.add_argument("--force", action="store_true", help="reload even if sha256 matches")
     args = ap.parse_args()
@@ -94,10 +104,12 @@ def main() -> int:
     print("P0 merge plan")
     print(f"  live index   {live}  ({human(live.stat().st_size)})")
     print(f"  work copy    {work}")
-    print(f"  CVE List v5  {cve_tar.name}  "
-          f"{human(cve_tar.stat().st_size) if cve_tar.exists() else 'MISSING'}")
-    print(f"  PoC-in-GitHub {poc_tar.name}  "
-          f"{human(poc_tar.stat().st_size) if poc_tar.exists() else 'MISSING'}")
+    print(
+        f"  CVE List v5  {cve_tar.name}  {human(cve_tar.stat().st_size) if cve_tar.exists() else 'MISSING'}"
+    )
+    print(
+        f"  PoC-in-GitHub {poc_tar.name}  {human(poc_tar.stat().st_size) if poc_tar.exists() else 'MISSING'}"
+    )
     print("  schema       v2 -> v3 (cve_cna, cve_cna_ref, cve_cna_product, cve_meta,")
     print("                poc, poc_orphan, cve_alias, source_state)")
     print("  policy       NVD description/CVSS never overwritten; CNA stored side by side")
@@ -137,8 +149,7 @@ def main() -> int:
 
     digest = sha256(work)
     print(f"\n  merged sha256    {digest}")
-    work.with_suffix(work.suffix + ".sha256").write_text(
-        f"{digest}  {work.name}\n")
+    work.with_suffix(work.suffix + ".sha256").write_text(f"{digest}  {work.name}\n")
 
     if args.promote:
         backup = paths.INDEX / "crowbar.db.pre-p0"
@@ -149,11 +160,12 @@ def main() -> int:
         shutil.copy2(work, tmp)
         tmp.replace(live)
         print(f"  promoted         {live}")
-        paths.save_state(schema=paths.SCHEMA_VERSION)   # freshness lives in the DB's meta rows
+        paths.save_state(schema=paths.SCHEMA_VERSION)  # freshness lives in the DB's meta rows
         print(f"  state.json       schema={paths.SCHEMA_VERSION}")
     else:
-        print(f"\nnot promoted - review the diff, then run: "
-              f"python scripts/merge_p0.py --work {work} --promote")
+        print(
+            f"\nnot promoted - review the diff, then run: python scripts/merge_p0.py --work {work} --promote"
+        )
     return 0
 
 

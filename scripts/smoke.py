@@ -20,15 +20,11 @@ import sys
 
 def main() -> int:
     cli, mcp = sys.argv[1], sys.argv[2]
-    want_home = pathlib.Path(
-        sys.argv[3] if len(sys.argv) > 3 else pathlib.Path.home() / ".crowbar"
-    )
+    want_home = pathlib.Path(sys.argv[3] if len(sys.argv) > 3 else pathlib.Path.home() / ".crowbar")
     env = dict(os.environ, CROWBAR_NO_AUTO_UPDATE="1")
     env.pop("CROWBAR_HOME", None)
 
-    ver = subprocess.run(
-        [cli, "--version"], capture_output=True, text=True, env=env, check=True
-    )
+    ver = subprocess.run([cli, "--version"], capture_output=True, text=True, env=env, check=True)
     assert ver.stdout.startswith("crowbar "), ver.stdout
     where = json.loads(
         subprocess.run(
@@ -39,9 +35,7 @@ def main() -> int:
             check=True,
         ).stdout
     )
-    assert pathlib.Path(where["home"]) == want_home, (
-        f"home {where['home']} != {want_home}"
-    )
+    assert pathlib.Path(where["home"]) == want_home, f"home {where['home']} != {want_home}"
 
     msgs = "".join(
         json.dumps(m) + "\n"
@@ -62,18 +56,14 @@ def main() -> int:
             },
         )
     )
-    res = subprocess.run(
-        [mcp], input=msgs, capture_output=True, text=True, env=env, timeout=60
-    )
+    res = subprocess.run([mcp], input=msgs, capture_output=True, text=True, env=env, timeout=60)
     out = {r["id"]: r for r in map(json.loads, res.stdout.splitlines()) if r.get("id")}
     assert out[1]["result"]["serverInfo"]["name"] == "crowbar", out.get(1)
     tools = {t["name"] for t in out[2]["result"]["tools"]}
     assert {"cb_stats", "cb_cve", "cb_product", "cb_search"} <= tools, tools
     # an empty home has no index; the server must say so instead of crashing
     assert "no index" in json.dumps(out[3]), out[3]
-    print(
-        f"smoke ok: {ver.stdout.strip()} · home {where['home']} · {len(tools)} MCP tools"
-    )
+    print(f"smoke ok: {ver.stdout.strip()} · home {where['home']} · {len(tools)} MCP tools")
     return 0
 
 

@@ -3,6 +3,7 @@
 Index age lives in the meta rows a build/update writes with the data
 (datasets.index_status), so that is what this rewinds.
 """
+
 from __future__ import annotations
 
 import sqlite3

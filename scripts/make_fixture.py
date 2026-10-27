@@ -9,6 +9,7 @@ Usage:
 The fixture is ~200 KB and contains one or two rows per table plus every FTS
 index, so CLI/MCP code paths run without the 3.3 GB corpus.
 """
+
 from __future__ import annotations
 
 import pathlib

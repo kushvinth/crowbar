@@ -4,6 +4,7 @@ Pure-fixture tests - no corpus, no network.  They cover the merge logic that
 the audit flagged as untested: adapter parsing, idempotency, provenance rows,
 orphan policy and deprecated-CWE stubs.
 """
+
 from __future__ import annotations
 
 import io
@@ -33,30 +34,57 @@ CVE_DOC = {
         "cna": {
             "title": "Widget overflow in the widget parser",
             "descriptions": [{"lang": "en", "value": "A heap overflow in the widget parser."}],
-            "problemTypes": [{"descriptions": [{"lang": "en", "cweId": "CWE-787",
-                                                "type": "CWE"}]}],
+            "problemTypes": [{"descriptions": [{"lang": "en", "cweId": "CWE-787", "type": "CWE"}]}],
             "affected": [
-                {"vendor": "Example Vendor", "product": "Widget",
-                 "versions": [{"status": "affected", "version": "1.0",
-                               "lessThanOrEqual": "1.4.2", "versionType": "semver"}]},
+                {
+                    "vendor": "Example Vendor",
+                    "product": "Widget",
+                    "versions": [
+                        {
+                            "status": "affected",
+                            "version": "1.0",
+                            "lessThanOrEqual": "1.4.2",
+                            "versionType": "semver",
+                        }
+                    ],
+                },
             ],
             "references": [{"url": "https://example.invalid/advisory/1", "tags": ["Vendor Advisory"]}],
-            "metrics": [{"cvssV3_1": {"version": "3.1", "baseScore": 9.8,
-                                      "baseSeverity": "CRITICAL",
-                                      "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"}}],
+            "metrics": [
+                {
+                    "cvssV3_1": {
+                        "version": "3.1",
+                        "baseScore": 9.8,
+                        "baseSeverity": "CRITICAL",
+                        "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+                    }
+                }
+            ],
         }
     },
 }
 
 POC_REPOS = [
-    {"id": 1, "full_name": "someone/CVE-2026-0001-poc",
-     "html_url": "https://github.com/someone/CVE-2026-0001-poc",
-     "stargazers_count": 12, "language": "Python", "created_at": "2026-09-09T00:00:00Z",
-     "pushed_at": "2026-09-10T00:00:00Z", "description": "proof of concept"},
-    {"id": 2, "full_name": "other/CVE-2026-0001",
-     "html_url": "https://github.com/other/CVE-2026-0001",
-     "stargazers_count": 3, "language": "C", "created_at": "2026-09-11T00:00:00Z",
-     "pushed_at": "2026-09-12T00:00:00Z", "description": None},
+    {
+        "id": 1,
+        "full_name": "someone/CVE-2026-0001-poc",
+        "html_url": "https://github.com/someone/CVE-2026-0001-poc",
+        "stargazers_count": 12,
+        "language": "Python",
+        "created_at": "2026-09-09T00:00:00Z",
+        "pushed_at": "2026-09-10T00:00:00Z",
+        "description": "proof of concept",
+    },
+    {
+        "id": 2,
+        "full_name": "other/CVE-2026-0001",
+        "html_url": "https://github.com/other/CVE-2026-0001",
+        "stargazers_count": 3,
+        "language": "C",
+        "created_at": "2026-09-11T00:00:00Z",
+        "pushed_at": "2026-09-12T00:00:00Z",
+        "description": None,
+    },
 ]
 
 
@@ -113,10 +141,14 @@ class TestParseCveorg(V3Case):
 class TestLoadCveorg(V3Case):
     def setUp(self):
         super().setUp()
-        self.tar = _tarball({"cvelistV5-main/cves/2026/0xxx/CVE-2026-0001.json": CVE_DOC,
-                             "cvelistV5-main/cves/2026/0xxx/CVE-2026-0002.json":
-                                 json.loads(json.dumps(CVE_DOC).replace("CVE-2026-0001",
-                                                                        "CVE-2026-0002"))})
+        self.tar = _tarball(
+            {
+                "cvelistV5-main/cves/2026/0xxx/CVE-2026-0001.json": CVE_DOC,
+                "cvelistV5-main/cves/2026/0xxx/CVE-2026-0002.json": json.loads(
+                    json.dumps(CVE_DOC).replace("CVE-2026-0001", "CVE-2026-0002")
+                ),
+            }
+        )
 
     def test_inserts_missing_cve_only(self):
         n = intel.load_cveorg(self.tar, self.con)
@@ -134,7 +166,8 @@ class TestLoadCveorg(V3Case):
             "INSERT INTO cve(id,published,modified,status,description,cvss,cvss_version,"
             "cvss_vector,severity,kev,epss,epss_pct,year) "
             "VALUES ('CVE-2026-0001','2026-01-01','2026-01-02','Analyzed',"
-            "'NVD description',5.0,'3.1','V','MEDIUM',0,0.1,10.0,2026)")
+            "'NVD description',5.0,'3.1','V','MEDIUM',0,0.1,10.0,2026)"
+        )
         n = intel.load_cveorg(self.tar, self.con)
         self.assertEqual(n, 1)  # only CVE-2026-0002 is new
         row = self.con.execute("SELECT * FROM cve WHERE id='CVE-2026-0001'").fetchone()
@@ -146,17 +179,20 @@ class TestLoadCveorg(V3Case):
 
     def test_idempotent(self):
         intel.load_cveorg(self.tar, self.con)
-        first = {t: self.con.execute(f"SELECT count(*) FROM {t}").fetchone()[0]
-                 for t in ("cve", "cve_cna", "cve_cna_ref", "cve_cna_product", "cve_fts")}
+        first = {
+            t: self.con.execute(f"SELECT count(*) FROM {t}").fetchone()[0]
+            for t in ("cve", "cve_cna", "cve_cna_ref", "cve_cna_product", "cve_fts")
+        }
         intel.load_cveorg(self.tar, self.con)
-        second = {t: self.con.execute(f"SELECT count(*) FROM {t}").fetchone()[0]
-                  for t in ("cve", "cve_cna", "cve_cna_ref", "cve_cna_product", "cve_fts")}
+        second = {
+            t: self.con.execute(f"SELECT count(*) FROM {t}").fetchone()[0]
+            for t in ("cve", "cve_cna", "cve_cna_ref", "cve_cna_product", "cve_fts")
+        }
         self.assertEqual(first, second)
 
     def test_cve_meta_years(self):
         intel.load_cveorg(self.tar, self.con)
-        row = self.con.execute(
-            "SELECT * FROM cve_meta WHERE cve_id='CVE-2026-0001'").fetchone()
+        row = self.con.execute("SELECT * FROM cve_meta WHERE cve_id='CVE-2026-0001'").fetchone()
         self.assertEqual(row["cve_year"], 2026)
         self.assertEqual(row["published_year"], 2026)
 
@@ -173,19 +209,23 @@ class TestLoadCveorg(V3Case):
 class TestLoadPoc(V3Case):
     def setUp(self):
         super().setUp()
-        self.tar = _tarball({
-            "PoC-in-GitHub-master/2026/CVE-2026-0001.json": POC_REPOS,
-            "PoC-in-GitHub-master/2026/CVE-2099-9999.json": [POC_REPOS[0]],
-        })
+        self.tar = _tarball(
+            {
+                "PoC-in-GitHub-master/2026/CVE-2026-0001.json": POC_REPOS,
+                "PoC-in-GitHub-master/2026/CVE-2099-9999.json": [POC_REPOS[0]],
+            }
+        )
 
     def test_repos_and_orphan(self):
         self.con.execute(
             "INSERT INTO cve(id,published,modified,status,description,cvss,cvss_version,"
             "cvss_vector,severity,kev,epss,epss_pct,year) "
             "VALUES ('CVE-2026-0001','2026-01-01','2026-01-02','Published','x',1.0,'3.1',"
-            "'V','LOW',0,0.0,0.0,2026)")
-        self.con.execute("INSERT INTO cve_meta(cve_id,published_year,cve_year) "
-                         "VALUES ('CVE-2026-0001',2026,2026)")
+            "'V','LOW',0,0.0,0.0,2026)"
+        )
+        self.con.execute(
+            "INSERT INTO cve_meta(cve_id,published_year,cve_year) VALUES ('CVE-2026-0001',2026,2026)"
+        )
         n = intel.load_poc_github(self.tar, self.con)
         self.assertEqual(n, 3)
         rows = self.con.execute("SELECT * FROM poc ORDER BY url").fetchall()
@@ -194,8 +234,7 @@ class TestLoadPoc(V3Case):
         self.assertEqual(self.con.execute("SELECT count(*) FROM poc_orphan").fetchone()[0], 1)
         orphan = self.con.execute("SELECT * FROM poc_orphan").fetchone()
         self.assertEqual(orphan["cve_id"], "CVE-2099-9999")
-        meta = self.con.execute(
-            "SELECT * FROM cve_meta WHERE cve_id='CVE-2026-0001'").fetchone()
+        meta = self.con.execute("SELECT * FROM cve_meta WHERE cve_id='CVE-2026-0001'").fetchone()
         self.assertEqual(meta["has_poc"], 1)
         self.assertEqual(meta["poc_count"], 2)
 
@@ -204,17 +243,25 @@ class TestLoadPoc(V3Case):
             "INSERT INTO cve(id,published,modified,status,description,cvss,cvss_version,"
             "cvss_vector,severity,kev,epss,epss_pct,year) "
             "VALUES ('CVE-2026-0001','2026-01-01','2026-01-02','Published','x',1.0,'3.1',"
-            "'V','LOW',0,0.0,0.0,2026)")
+            "'V','LOW',0,0.0,0.0,2026)"
+        )
         intel.load_poc_github(self.tar, self.con)
         intel.load_poc_github(self.tar, self.con)
         self.assertEqual(self.con.execute("SELECT count(*) FROM poc").fetchone()[0], 3)
 
     def test_no_code_is_executed(self):
         # The tarball payload is inert data; loading must not import or eval it.
-        evil = _tarball({"PoC-in-GitHub-master/2026/CVE-2026-0001.json":
-                         [{"html_url": "https://github.com/x/y",
-                           "full_name": "x/y",
-                           "description": "__import__('os').system('touch /tmp/hv-pwned')"}]})
+        evil = _tarball(
+            {
+                "PoC-in-GitHub-master/2026/CVE-2026-0001.json": [
+                    {
+                        "html_url": "https://github.com/x/y",
+                        "full_name": "x/y",
+                        "description": "__import__('os').system('touch /tmp/hv-pwned')",
+                    }
+                ]
+            }
+        )
         intel.load_poc_github(evil, self.con)
         self.assertFalse(pathlib.Path("/tmp/hv-pwned").exists())
 
@@ -223,8 +270,7 @@ class TestProvenance(V3Case):
     def test_source_state_records_hash_and_license(self):
         path = _tarball({"cvelistV5-main/cves/2026/0xxx/CVE-2026-0001.json": CVE_DOC})
         intel.load_cveorg(path, self.con)
-        row = self.con.execute(
-            "SELECT * FROM source_state WHERE source='cveorg-cvelist'").fetchone()
+        row = self.con.execute("SELECT * FROM source_state WHERE source='cveorg-cvelist'").fetchone()
         self.assertIsNotNone(row)
         self.assertEqual(row["status"], "loaded")
         self.assertEqual(row["license"], "MIT")
@@ -247,7 +293,8 @@ class TestCweStubs(V3Case):
         self.con.execute("INSERT INTO cve_cwe VALUES ('CVE-2026-0001','CWE-264')")
         self.con.execute(
             "INSERT INTO cwe(id,name,abstraction,status,description) "
-            "VALUES ('CWE-502','Deserialization','Base','Stable','x')")
+            "VALUES ('CWE-502','Deserialization','Base','Stable','x')"
+        )
         n = intel.stub_missing_cwes(self.con)
         self.assertEqual(n, 1)
         row = self.con.execute("SELECT * FROM cwe WHERE id='CWE-264'").fetchone()
@@ -258,8 +305,7 @@ class TestCweStubs(V3Case):
         self.con.execute("INSERT INTO cve_cwe VALUES ('CVE-2026-0001','CWE-264')")
         intel.stub_missing_cwes(self.con)
         self.assertEqual(intel.stub_missing_cwes(self.con), 0)
-        self.assertEqual(self.con.execute(
-            "SELECT count(*) FROM cwe WHERE id='CWE-264'").fetchone()[0], 1)
+        self.assertEqual(self.con.execute("SELECT count(*) FROM cwe WHERE id='CWE-264'").fetchone()[0], 1)
 
 
 class TestAliasPolicy(V3Case):
@@ -268,7 +314,8 @@ class TestAliasPolicy(V3Case):
             "INSERT INTO advisory(source,id,ecosystem,package,cve,summary,severity,published,"
             "modified,url,aliases,affected_count) VALUES "
             "('osv','GHSA-xxxx-yyyy-zzzz','npm','pkg','CVE-2026-0001','s','high','2026-01-01',"
-            "'2026-01-02','https://osv.dev/x','GHSA-xxxx-yyyy-zzzz,CVE-2026-0001',1)")
+            "'2026-01-02','https://osv.dev/x','GHSA-xxxx-yyyy-zzzz,CVE-2026-0001',1)"
+        )
         n = intel.rebuild_aliases(self.con)
         self.assertEqual(n, 1)
         row = self.con.execute("SELECT * FROM cve_alias").fetchone()

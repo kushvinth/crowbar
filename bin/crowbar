@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """crowbar - crowbar CLI entry point. Works from a symlink (.crowbar/bin/crowbar)."""
+
 import pathlib
 import sys
 

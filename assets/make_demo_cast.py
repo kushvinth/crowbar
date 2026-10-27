@@ -98,9 +98,7 @@ def main() -> None:
         t += 1.9  # read pause
         out("\r\n" + PROMPT)
         t += 0.5
-    out(
-        f"{DIM}# offline. reproducible. every answer grounded in the local index.{RST}\r\n"
-    )
+    out(f"{DIM}# offline. reproducible. every answer grounded in the local index.{RST}\r\n")
     t += 2.2
 
     header = {

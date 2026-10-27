@@ -1,4 +1,5 @@
 """Command line interface. Terminal only - no web UI, no TUI dependency."""
+
 from __future__ import annotations
 
 import argparse
@@ -20,7 +21,9 @@ from . import catalog, datasets, db, paths, query
 TTY = sys.stdout.isatty() and os.environ.get("NO_COLOR") is None
 DIM, BOLD, RED, YEL, GRN, CYN, MAG, RST = (
     ("\033[2m", "\033[1m", "\033[31m", "\033[33m", "\033[32m", "\033[36m", "\033[35m", "\033[0m")
-    if TTY else ("",) * 8)
+    if TTY
+    else ("",) * 8
+)
 SEV_COLOR = {"CRITICAL": RED, "HIGH": YEL, "MEDIUM": YEL, "LOW": GRN, "NONE": DIM}
 
 
@@ -36,6 +39,7 @@ def die(msg: str, code: int = 1) -> NoReturn:
 
 class Spinner:
     """Animated status line on a terminal; plain prints everywhere else."""
+
     FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 
     def __init__(self, label: str):
@@ -64,7 +68,7 @@ class Spinner:
             with self._lock:
                 cols = shutil.get_terminal_size().columns
                 line = f"{self.FRAMES[i % len(self.FRAMES)]} {self.label} ({time.time() - self._t0:.0f}s)"
-                sys.stdout.write(f"\r\033[K{CYN}{line[:cols - 1]}{RST}")
+                sys.stdout.write(f"\r\033[K{CYN}{line[: cols - 1]}{RST}")
                 sys.stdout.flush()
             i += 1
 
@@ -109,8 +113,9 @@ def banner() -> str:
     """The logo, red fading to magenta on a colour terminal."""
     if not TTY:
         return BANNER
-    return "\n".join(f"\033[38;5;{c}m{line}{RST}"
-                     for c, line in zip((196, 197, 198, 199, 200, 201), BANNER.splitlines()))
+    return "\n".join(
+        f"\033[38;5;{c}m{line}{RST}" for c, line in zip((196, 197, 198, 199, 200, 201), BANNER.splitlines())
+    )
 
 
 def ago(iso: str | None) -> str:
@@ -119,8 +124,9 @@ def ago(iso: str | None) -> str:
         return "-"
     timed = len(iso) >= 19
     try:
-        t = calendar.timegm(time.strptime(iso[:19] if timed else iso[:10],
-                                          "%Y-%m-%dT%H:%M:%S" if timed else "%Y-%m-%d"))
+        t = calendar.timegm(
+            time.strptime(iso[:19] if timed else iso[:10], "%Y-%m-%dT%H:%M:%S" if timed else "%Y-%m-%d")
+        )
     except ValueError:
         return iso[:10]
     secs = max(0, time.time() - t)
@@ -156,10 +162,9 @@ def connect_or_die():
         con = db.connect()
     except db.NotIndexed as exc:
         die(f"{exc}")
-    if db.schema_version(con) != paths.SCHEMA_VERSION:
-        old = db.schema_version(con) < paths.SCHEMA_VERSION   # update() migrates older schemas in place
-        die(f"index schema v{db.schema_version(con)} != v{paths.SCHEMA_VERSION} - run: crowbar "
-            f"{'update' if old else 'build'}")
+    err = db.schema_error(con)
+    if err:
+        die(err)
     if datasets.refresh_in_background(datasets.index_status(db.meta(con))):
         print(f"{DIM}↻ index is over a day old - refreshing in the background{RST}", file=sys.stderr)
     return con
@@ -169,10 +174,24 @@ def connect_or_die():
 def cmd_search(args) -> None:
     con = connect_or_die()
     rows = query.search(
-        con, args.query or "", limit=args.limit, offset=args.offset, sort=args.sort,
-        severity=args.severity, year=args.year, since=args.since, kev=args.kev,
-        exploit=args.exploit, epss=args.epss, cvss=args.cvss, cwe=args.cwe,
-        product=args.product, vendor=args.vendor, ssvc=args.ssvc, poc=args.poc)
+        con,
+        args.query or "",
+        limit=args.limit,
+        offset=args.offset,
+        sort=args.sort,
+        severity=args.severity,
+        year=args.year,
+        since=args.since,
+        kev=args.kev,
+        exploit=args.exploit,
+        epss=args.epss,
+        cvss=args.cvss,
+        cwe=args.cwe,
+        product=args.product,
+        vendor=args.vendor,
+        ssvc=args.ssvc,
+        poc=args.poc,
+    )
     if args.json:
         out_json(rows)
         return
@@ -181,8 +200,10 @@ def cmd_search(args) -> None:
         tag += f" {DIM}nuc×{r['nuclei_count']}{RST}" if r["nuclei_count"] else ""
         tag += f" {MAG}poc×{r['poc_count']}{RST}" if r.get("poc_count") else ""
         print(f"{BOLD}{r['id']}{RST} {sev_badge(r['severity'], r['cvss'])} {risk_bits(r)}{tag}".rstrip())
-        print(f"  {DIM}{(r['published'] or '')[:10]}{RST}  "
-              f"{textwrap.shorten(r['description'] or '', args.width - 4, placeholder='…')}")
+        print(
+            f"  {DIM}{(r['published'] or '')[:10]}{RST}  "
+            f"{textwrap.shorten(r['description'] or '', args.width - 4, placeholder='…')}"
+        )
     more = f" · next page: --offset {args.offset + args.limit}" if len(rows) == args.limit else ""
     print(f"\n{DIM}{len(rows)} shown{more}{RST}")
 
@@ -191,26 +212,46 @@ def cmd_browse(args) -> None:
     """Interactive fzf browser: type to filter, preview the CVE, enter to open."""
     con = connect_or_die()
     fzf = shutil.which("fzf")
-    rows = query.search(con, args.query or "", limit=args.limit, kev=args.kev,
-                        exploit=args.exploit, sort="relevance" if args.query else "newest")
+    rows = query.search(
+        con,
+        args.query or "",
+        limit=args.limit,
+        kev=args.kev,
+        exploit=args.exploit,
+        sort="relevance" if args.query else "newest",
+    )
     if not fzf or not (sys.stdin.isatty() and sys.stdout.isatty()):
         for r in rows:
-            print(f"{r['id']}  {sev_badge(r['severity'], r['cvss'])}  {risk_bits(r)}  "
-                  f"{(r['description'] or '')[:80]}")
+            print(
+                f"{r['id']}  {sev_badge(r['severity'], r['cvss'])}  {risk_bits(r)}  "
+                f"{(r['description'] or '')[:80]}"
+            )
         if not fzf:
             print("\n(fzf not installed - showing plain list)", file=sys.stderr)
         return
     lines = "\n".join(
         f"{r['id']}\t{r['severity'] or '-'}\t{r['cvss'] if r['cvss'] is not None else '-'}\t"
         f"{'KEV' if r['kev'] else ''}\t{(r['description'] or '')[:110]}"
-        for r in rows)
+        for r in rows
+    )
     hv = shutil.which("crowbar") or str(paths.ROOT / "bin" / "crowbar")
     pick = subprocess.run(
-        [fzf, "--ansi", "--delimiter=\t", "--with-nth=1,2,3,4,5",
-         "--header", f"{len(rows)} CVEs - enter to open, esc to quit",
-         "--preview", f"{hv} --width 100 cve {{1}}",
-         "--preview-window", "right:62%:wrap"],
-        input=lines, text=True, capture_output=True)
+        [
+            fzf,
+            "--ansi",
+            "--delimiter=\t",
+            "--with-nth=1,2,3,4,5",
+            "--header",
+            f"{len(rows)} CVEs - enter to open, esc to quit",
+            "--preview",
+            f"{hv} --width 100 cve {{1}}",
+            "--preview-window",
+            "right:62%:wrap",
+        ],
+        input=lines,
+        text=True,
+        capture_output=True,
+    )
     cid = (pick.stdout or "").split("\t")[0].strip()
     if cid:
         subprocess.run([hv, "cve", cid])
@@ -228,8 +269,10 @@ def cmd_cve(args) -> None:
         return
     print(f"{BOLD}{d['id']}{RST}  {sev_badge(d['severity'], d['cvss'])}  {risk_bits(d)}")
     print(f"{BOLD}{textwrap.shorten(d['description'] or '', args.width, placeholder='…')}{RST}\n")
-    print(f"  {DIM}published{RST} {d['published']}   {DIM}modified{RST} {d['modified']}"
-          f"   {DIM}status{RST} {d['status']}")
+    print(
+        f"  {DIM}published{RST} {d['published']}   {DIM}modified{RST} {d['modified']}"
+        f"   {DIM}status{RST} {d['status']}"
+    )
     if d["cvss_vector"]:
         print(f"  {DIM}vector{RST}    {d['cvss_vector']}")
     if d["epss"] is not None:
@@ -239,11 +282,15 @@ def cmd_cve(args) -> None:
     if d["affects"]:
         labels = [a["label"] for a in d["affects"]]
         more = d["affects_total"] - 10
-        print(f"  {DIM}affects{RST}   {textwrap.shorten(', '.join(labels[:10]), args.width - 14, placeholder=f'… (+{more} ranges)')}")
+        print(
+            f"  {DIM}affects{RST}   {textwrap.shorten(', '.join(labels[:10]), args.width - 14, placeholder=f'… (+{more} ranges)')}"
+        )
     if d["ssvc"]:
         s = d["ssvc"]
-        print(f"  {DIM}ssvc{RST}      exploitation={s['exploitation']} automatable={s['automatable']}"
-              f" impact={s['technical_impact']}")
+        print(
+            f"  {DIM}ssvc{RST}      exploitation={s['exploitation']} automatable={s['automatable']}"
+            f" impact={s['technical_impact']}"
+        )
     print()
     if d["kev_detail"]:
         k = d["kev_detail"]
@@ -255,8 +302,10 @@ def cmd_cve(args) -> None:
     if d["exploits"]:
         print(f"{MAG}▌ Exploit-DB ({d['exploits_total']}){RST}")
         for e in d["exploits"][:8]:
-            print(f"  {e['id']:>6}  {(e['platform'] or '-'):<10} {(e['type'] or '-'):<8} "
-                  f"{textwrap.shorten(e['description'] or '', args.width - 34, placeholder='…')}")
+            print(
+                f"  {e['id']:>6}  {(e['platform'] or '-'):<10} {(e['type'] or '-'):<8} "
+                f"{textwrap.shorten(e['description'] or '', args.width - 34, placeholder='…')}"
+            )
         print()
     if d["nuclei"]:
         print(f"{CYN}▌ Nuclei ({len(d['nuclei'])}){RST}")
@@ -277,12 +326,16 @@ def cmd_cve(args) -> None:
         print(f"{GRN}▌ Talked about ({len(d['mentions'])}){RST}")
         for m in d["mentions"][:8]:
             score = f"▲{m['score']}" if m["score"] else ""
-            print(f"  {m['source']:<15} {DIM}{ago(m['posted_at']):>8}{RST} {score:<6} "
-                  f"{textwrap.shorten(m['title'] or '', max(20, args.width - 36), placeholder='…')}")
+            print(
+                f"  {m['source']:<15} {DIM}{ago(m['posted_at']):>8}{RST} {score:<6} "
+                f"{textwrap.shorten(m['title'] or '', max(20, args.width - 36), placeholder='…')}"
+            )
         print()
     if d.get("cna") and d["cna"].get("description") and d["cna"]["description"] != d["description"]:
-        print(f"{DIM}CNA record ({d['cna']['assigner'] or 'unknown'}):{RST} "
-              f"{textwrap.shorten(d['cna']['description'], args.width - 4, placeholder='…')}\n")
+        print(
+            f"{DIM}CNA record ({d['cna']['assigner'] or 'unknown'}):{RST} "
+            f"{textwrap.shorten(d['cna']['description'], args.width - 4, placeholder='…')}\n"
+        )
     if d.get("aliases"):
         print(f"{DIM}aliases{RST}  {', '.join(d['aliases'][:20])}")
     if d["references"]:
@@ -302,8 +355,10 @@ def cmd_product(args) -> None:
         head += f" version {args.version}"
     print(f"{DIM}{head}{RST}\n")
     for r in rows:
-        print(f"{BOLD}{r['id']}{RST} {sev_badge(r['severity'], r['cvss'])} {risk_bits(r)}  "
-              f"{DIM}{(r['published'] or '')[:10]}{RST}")
+        print(
+            f"{BOLD}{r['id']}{RST} {sev_badge(r['severity'], r['cvss'])} {risk_bits(r)}  "
+            f"{DIM}{(r['published'] or '')[:10]}{RST}"
+        )
         if r["matched"]:
             print(f"  {DIM}matched{RST} {', '.join(r['matched'])}")
         print(f"  {textwrap.shorten(r['description'] or '', args.width - 2, placeholder='…')}")
@@ -325,15 +380,24 @@ def cmd_kev(args) -> None:
 def cmd_exploit(args) -> None:
     con = connect_or_die()
     if args.query.isdigit():
-        try:
-            e = query.exploit_fetch(con, args.query)
-        except KeyError:
-            die(f"exploit {args.query} not found")
+        if args.fetch:
+            try:
+                e = query.exploit_fetch(con, args.query)
+            except KeyError:
+                die(f"exploit {args.query} not found")
+        else:
+            e = query.exploit_lookup(con, args.query)
+            if e.get("error"):
+                die(f"exploit {args.query} not found")
         if args.json:
             out_json(e)
         else:
             print(f"{BOLD}{e['id']}{RST} {e['platform']} {e['type']}  {e['description']}")
-            print(f"{DIM}local:{RST} {e['local_path']}")
+            print(
+                f"{DIM}local:{RST} {e['local_path']}"
+                if e["local_path"]
+                else f"{DIM}not on disk - {e['fetch'].split('   #')[0]}{RST}"
+            )
         return
     rows = query.exploit_search(con, args.query, args.limit)
     if args.json:
@@ -341,9 +405,11 @@ def cmd_exploit(args) -> None:
         return
     for r in rows:
         v = f"{GRN}✓{RST}" if r["verified"] else " "
-        print(f"{v} {BOLD}{r['id']:>6}{RST} {DIM}{(r['date'] or '')[:10]:<10}{RST} "
-              f"{(r['platform'] or '-'):<12} "
-              f"{textwrap.shorten(r['description'] or '', args.width - 40, placeholder='…')}")
+        print(
+            f"{v} {BOLD}{r['id']:>6}{RST} {DIM}{(r['date'] or '')[:10]:<10}{RST} "
+            f"{(r['platform'] or '-'):<12} "
+            f"{textwrap.shorten(r['description'] or '', args.width - 40, placeholder='…')}"
+        )
         if r["codes"]:
             print(f"        {DIM}{r['codes']}{RST}")
 
@@ -355,8 +421,10 @@ def cmd_nuclei(args) -> None:
         out_json(rows)
         return
     for r in rows:
-        print(f"{BOLD}{r['id']}{RST} [{r['severity'] or '?'}] {r['domain']:<9} "
-              f"{textwrap.shorten(r['name'] or '', args.width - 40, placeholder='…')}")
+        print(
+            f"{BOLD}{r['id']}{RST} [{r['severity'] or '?'}] {r['domain']:<9} "
+            f"{textwrap.shorten(r['name'] or '', args.width - 40, placeholder='…')}"
+        )
         print(f"  {DIM}{r['path']}  {r['cve']}{RST}")
 
 
@@ -376,12 +444,23 @@ def cmd_models(args) -> None:
     if args.json:
         out_json(rows)
         return
-    table(["provider", "model", "ctx", "out", "$in/M", "$out/M", "cap"],
-          [[r["provider"], r["name"], f"{(r['context'] or 0) // 1000}k",
-            f"{(r['output_limit'] or 0) // 1000}k", money(r["input_cost"]),
-            money(r["output_cost"]),
-            "".join(x for x, on in (("R", r["reasoning"]), ("T", r["tool_call"]), ("V", r["vision"])) if on)]
-           for r in rows])
+    table(
+        ["provider", "model", "ctx", "out", "$in/M", "$out/M", "cap"],
+        [
+            [
+                r["provider"],
+                r["name"],
+                f"{(r['context'] or 0) // 1000}k",
+                f"{(r['output_limit'] or 0) // 1000}k",
+                money(r["input_cost"]),
+                money(r["output_cost"]),
+                "".join(
+                    x for x, on in (("R", r["reasoning"]), ("T", r["tool_call"]), ("V", r["vision"])) if on
+                ),
+            ]
+            for r in rows
+        ],
+    )
 
 
 def cmd_attack(args) -> None:
@@ -424,8 +503,9 @@ def cmd_capec(args) -> None:
 
 def cmd_os(args) -> None:
     con = connect_or_die()
-    rows = query.os_search(con, args.query, args.platform, args.impact,
-                           args.exploited, args.since, args.limit)
+    rows = query.os_search(
+        con, args.query, args.platform, args.impact, args.exploited, args.since, args.limit
+    )
     if args.json:
         out_json(rows)
         return
@@ -439,9 +519,11 @@ def cmd_os(args) -> None:
     print(f"{DIM}{head}{RST}\n")
     for r in rows:
         cve = r["cve"] or " - "
-        print(f"{BOLD}{cve:<16}{RST} {r['platform']:<6} {r['severity'] or '-':<9} "
-              f"{(r['impact'] or '-'):<14} {DIM}{(r['released'] or '')[:10]}{RST}  "
-              f"{textwrap.shorten(r['product'] or '', args.width - 70, placeholder='…')}")
+        print(
+            f"{BOLD}{cve:<16}{RST} {r['platform']:<6} {r['severity'] or '-':<9} "
+            f"{(r['impact'] or '-'):<14} {DIM}{(r['released'] or '')[:10]}{RST}  "
+            f"{textwrap.shorten(r['product'] or '', args.width - 70, placeholder='…')}"
+        )
         if r["version"] and r["version"] not in (r["product"] or ""):
             print(f"  {DIM}{r['version']}{RST}")
     print(f"\n{DIM}{len(rows)} rows{RST}")
@@ -489,8 +571,10 @@ def cmd_bin(args) -> None:
         out_json(rows)
         return
     for r in rows:
-        print(f"{BOLD}{r['name']}{RST} {DIM}{r['source']}{RST}  "
-              f"{textwrap.shorten(r['description'] or '', args.width - 30, placeholder='…')}")
+        print(
+            f"{BOLD}{r['name']}{RST} {DIM}{r['source']}{RST}  "
+            f"{textwrap.shorten(r['description'] or '', args.width - 30, placeholder='…')}"
+        )
         print(f"  {DIM}{r['path']}  {r['tags']}{RST}")
 
 
@@ -501,30 +585,40 @@ def cmd_debian(args) -> None:
         out_json(rows)
         return
     for r in rows:
-        print(f"{BOLD}{r['cve']}{RST} {r['release']:<14} {r['status']:<16} "
-              f"{DIM}fixed {r['fixed'] or '-'}{RST} {r['urgency'] or ''}")
+        print(
+            f"{BOLD}{r['cve']}{RST} {r['release']:<14} {r['status']:<16} "
+            f"{DIM}fixed {r['fixed'] or '-'}{RST} {r['urgency'] or ''}"
+        )
 
 
 def cmd_poc(args) -> None:
     """Public GitHub PoC repositories (metadata only, never executed)."""
     con = connect_or_die()
     if args.cve:
-        rows = query.poc_search(con, args.query or "", cve=args.cve,
-                                language=args.language, min_stars=args.min_stars,
-                                limit=args.limit)
+        rows = query.poc_search(
+            con,
+            args.query or "",
+            cve=args.cve,
+            language=args.language,
+            min_stars=args.min_stars,
+            limit=args.limit,
+        )
     elif args.top:
         rows = query.poc_cves(con, args.limit)
         if args.json:
             out_json(rows)
             return
         for r in rows:
-            print(f"{BOLD}{r['cve_id']}{RST} {DIM}×{r['poc_count']} repos{RST}  "
-                  f"{r['severity'] or '-'} {r['cvss'] if r['cvss'] is not None else '-'}  "
-                  f"{r['description'] or ''}")
+            print(
+                f"{BOLD}{r['cve_id']}{RST} {DIM}×{r['poc_count']} repos{RST}  "
+                f"{r['severity'] or '-'} {r['cvss'] if r['cvss'] is not None else '-'}  "
+                f"{r['description'] or ''}"
+            )
         return
     else:
-        rows = query.poc_search(con, args.query or "", language=args.language,
-                                min_stars=args.min_stars, limit=args.limit)
+        rows = query.poc_search(
+            con, args.query or "", language=args.language, min_stars=args.min_stars, limit=args.limit
+        )
     if args.json:
         out_json(rows)
         return
@@ -536,9 +630,13 @@ def cmd_poc(args) -> None:
 def cmd_sources(args) -> None:
     """Provenance: which source filled which table, with license and hash."""
     con = connect_or_die()
-    rows = [dict(r) for r in con.execute(
-        "SELECT source, url, path, license, sha256, fetched_at, loaded_at, "
-        "record_count, status, note FROM source_state ORDER BY source")]
+    rows = [
+        dict(r)
+        for r in con.execute(
+            "SELECT source, url, path, license, sha256, fetched_at, loaded_at, "
+            "record_count, status, note FROM source_state ORDER BY source"
+        )
+    ]
     if args.json:
         out_json(rows)
         return
@@ -546,8 +644,10 @@ def cmd_sources(args) -> None:
         print("no source_state rows (run: crowbar update)")
         return
     for r in rows:
-        print(f"{BOLD}{r['source']}{RST}  {r['status']}  {r['record_count']:,} records  "
-              f"{DIM}license={r['license'] or '?'}{RST}")
+        print(
+            f"{BOLD}{r['source']}{RST}  {r['status']}  {r['record_count']:,} records  "
+            f"{DIM}license={r['license'] or '?'}{RST}"
+        )
         print(f"  {DIM}{r['url']}{RST}")
         print(f"  {DIM}sha256 {r['sha256'] or '-'}{RST}")
         if r["note"]:
@@ -565,19 +665,37 @@ def cmd_map(args) -> None:
     for d in items:
         present, size = catalog.disk_state(d.dest)
         g = catalog.describe(d.name)
-        rows.append({
-            "name": d.name, "group": d.group, "tier": d.tier,
-            "path": d.dest, "present": present, "bytes": size,
-            "fetched_at": (manifest.get(d.name) or {}).get("fetched_at"),
-            "tables": g["tables"], "commands": g["commands"], "note": d.note,
-        })
+        rows.append(
+            {
+                "name": d.name,
+                "group": d.group,
+                "tier": d.tier,
+                "path": d.dest,
+                "present": present,
+                "bytes": size,
+                "fetched_at": (manifest.get(d.name) or {}).get("fetched_at"),
+                "tables": g["tables"],
+                "commands": g["commands"],
+                "note": d.note,
+            }
+        )
     if args.json:
         out_json(rows)
         return
-    table(["dataset", "tier", "status", "size", "indexes", "command"],
-          [[r["name"], r["tier"], "ok" if r["present"] else "-",
-            human_bytes(r["bytes"]), ",".join(r["tables"]) or "-",
-            (r["commands"] or ["-"])[0]] for r in rows])
+    table(
+        ["dataset", "tier", "status", "size", "indexes", "command"],
+        [
+            [
+                r["name"],
+                r["tier"],
+                "ok" if r["present"] else "-",
+                human_bytes(r["bytes"]),
+                ",".join(r["tables"]) or "-",
+                (r["commands"] or ["-"])[0],
+            ]
+            for r in rows
+        ],
+    )
     print(f"\n{DIM}raw path root: {paths.DATA}{RST}")
     print(f"{DIM}table meanings: crowbar map --tables{RST}")
 
@@ -612,9 +730,25 @@ def cmd_stats(args) -> None:
     meta = s.pop("meta", {})
     fresh = s.pop("freshness", {})
     print(f"{BOLD}corpus{RST}")
-    for k in ("cve", "cve_kev", "cve_with_epss", "cve_with_exploit", "cve_with_nuclei",
-              "cve_with_msf", "cpe_match", "kev", "exploit", "shellcode", "nuclei", "msf",
-              "attack", "cwe", "capec", "model", "ssvc"):
+    for k in (
+        "cve",
+        "cve_kev",
+        "cve_with_epss",
+        "cve_with_exploit",
+        "cve_with_nuclei",
+        "cve_with_msf",
+        "cpe_match",
+        "kev",
+        "exploit",
+        "shellcode",
+        "nuclei",
+        "msf",
+        "attack",
+        "cwe",
+        "capec",
+        "model",
+        "ssvc",
+    ):
         if k in s:
             print(f"  {k:<18} {s[k]:>10,}")
     print(f"  {'db':<18} {s['db_bytes'] / 1e6:>8.0f} MB   {DIM}{paths.DB}{RST}")
@@ -635,24 +769,30 @@ def cmd_home(args) -> None:
     print(banner())
     print(f"  {DIM}offline CVE intelligence for agents · rank by KEV > SSVC > EPSS > CVSS{RST}\n")
     if not paths.DB.exists():
-        print(f"  {RED}●{RST} no index yet - {BOLD}crowbar sync --tier lite && crowbar build --tier lite{RST}"
-              f" {DIM}(~150MB, a few minutes){RST}\n")
+        print(
+            f"  {RED}●{RST} no index yet - {BOLD}crowbar sync --tier lite && crowbar build --tier lite{RST}"
+            f" {DIM}(~150MB, a few minutes){RST}\n"
+        )
     else:
         con = connect_or_die()
         s = datasets.index_status(db.meta(con))
         newest = query.data_as_of(con)
         n = con.execute("SELECT count(*) FROM cve").fetchone()[0]
         dot = f"{YEL}●{RST} stale" if s["stale"] else f"{GRN}●{RST} fresh"
-        print(f"  {dot}  updated {ago(s['last_update'])} · newest CVE {ago(newest['cve_published'])}"
-              f" · newest KEV {ago(newest['kev_added'])} · {n:,} CVEs")
+        print(
+            f"  {dot}  updated {ago(s['last_update'])} · newest CVE {ago(newest['cve_published'])}"
+            f" · newest KEV {ago(newest['kev_added'])} · {n:,} CVEs"
+        )
         if s["last_error"]:
             print(f"  {YEL}last update failed {ago(s['last_error']['at'])}: {s['last_error']['error']}{RST}")
         print()
-    for cmd, what in (("trending", "what people are posting about this week"),
-                      ("new", "KEV additions, new CVEs and PoCs in the last 7 days"),
-                      ("cve CVE-2021-44228", "triage one CVE"),
-                      ("product nginx --version 1.18.0", "is my version affected?"),
-                      ("bench", "how fast is this index")):
+    for cmd, what in (
+        ("trending", "what people are posting about this week"),
+        ("new", "KEV additions, new CVEs and PoCs in the last 7 days"),
+        ("cve CVE-2021-44228", "triage one CVE"),
+        ("product nginx --version 1.18.0", "is my version affected?"),
+        ("bench", "how fast is this index"),
+    ):
         print(f"  {CYN}crowbar {cmd:<32}{RST} {DIM}{what}{RST}")
     print(f"\n  {DIM}crowbar --help for every command{RST}")
 
@@ -663,15 +803,19 @@ def cmd_trending(args) -> None:
     if args.json:
         out_json(rows)
         return
-    print(f"{BOLD}🔥 trending{RST} {DIM}- CVEs named on HN, oss-security, Full Disclosure, ZDI, "
-          f"Mastodon and ENISA's exploited list in the last {args.days:g} days{RST}\n")
+    print(
+        f"{BOLD}🔥 trending{RST} {DIM}- CVEs named on HN, oss-security, Full Disclosure, ZDI, "
+        f"Mastodon and ENISA's exploited list in the last {args.days:g} days{RST}\n"
+    )
     if not rows:
         print(f"{DIM}nothing yet - run: crowbar update{RST}")
         return
     for r in rows:
-        print(f"{heat(r['sources'])} {BOLD}{r['id']:<16}{RST} {sev_badge(r['severity'], r['cvss'])} "
-              f"{risk_bits(r)}  {DIM}{r['posts']} post{'s' * (r['posts'] != 1)} · {r['seen_on'].replace(',', ' · ')} · "
-              f"{ago(r['last_seen'])}{RST}")
+        print(
+            f"{heat(r['sources'])} {BOLD}{r['id']:<16}{RST} {sev_badge(r['severity'], r['cvss'])} "
+            f"{risk_bits(r)}  {DIM}{r['posts']} post{'s' * (r['posts'] != 1)} · {r['seen_on'].replace(',', ' · ')} · "
+            f"{ago(r['last_seen'])}{RST}"
+        )
         if r["description"]:
             print(f"      {textwrap.shorten(r['description'], args.width - 6, placeholder='…')}")
 
@@ -683,14 +827,31 @@ def cmd_new(args) -> None:
         out_json(d)
         return
     print(f"{BOLD}✨ new since {d['since']}{RST}\n")
-    sections = (("kev", RED, "CISA KEV additions", lambda r: f"{r['cve']:<16} {DIM}{r['date_added']}{RST} "
-                 f"{r['vendor']} {r['product']} - {r['name']}"),
-                ("eu_exploited", RED, "ENISA exploited", lambda r: f"{r['cve']:<16} {DIM}{ago(r['exploited_since'])}"
-                 f"{RST}{'  also in KEV' if r['kev'] else ''}"),
-                ("published", YEL, "new CVEs (KEV > EPSS > CVSS first)", lambda r: f"{r['id']:<16} "
-                 f"{sev_badge(r['severity'], r['cvss'])} {risk_bits(r)}  "
-                 f"{textwrap.shorten(r['description'] or '', max(20, args.width - 40), placeholder='…')}"),
-                ("pocs", MAG, "new public PoCs", lambda r: f"{r['cve']:<16} ★{r['stars'] or 0:<5} {r['repo']}"))
+    sections = (
+        (
+            "kev",
+            RED,
+            "CISA KEV additions",
+            lambda r: f"{r['cve']:<16} {DIM}{r['date_added']}{RST} "
+            f"{r['vendor']} {r['product']} - {r['name']}",
+        ),
+        (
+            "eu_exploited",
+            RED,
+            "ENISA exploited",
+            lambda r: f"{r['cve']:<16} {DIM}{ago(r['exploited_since'])}"
+            f"{RST}{'  also in KEV' if r['kev'] else ''}",
+        ),
+        (
+            "published",
+            YEL,
+            "new CVEs (KEV > EPSS > CVSS first)",
+            lambda r: f"{r['id']:<16} "
+            f"{sev_badge(r['severity'], r['cvss'])} {risk_bits(r)}  "
+            f"{textwrap.shorten(r['description'] or '', max(20, args.width - 40), placeholder='…')}",
+        ),
+        ("pocs", MAG, "new public PoCs", lambda r: f"{r['cve']:<16} ★{r['stars'] or 0:<5} {r['repo']}"),
+    )
     for key, color, title, line in sections:
         part = d[key]
         print(f"{color}▌ {title} ({part['total']:,}){RST}")
@@ -707,13 +868,18 @@ def cmd_bench(args) -> None:
     kev = con.execute("SELECT cve FROM kev ORDER BY date_added DESC LIMIT 1").fetchone()
     some = con.execute("SELECT id FROM cve ORDER BY rowid DESC LIMIT 1").fetchone()
     cid = (kev and kev[0]) or (some and some[0]) or "CVE-2021-44228"
-    cases = (("cve lookup", lambda: query.get_cve(con, cid)),
-             ("full-text search", lambda: query.search(con, "remote code execution", limit=20)),
-             ("product + version", lambda: query.products(con, "nginx", "1.18.0")),
-             ("KEV list", lambda: query.kev_list(con, None, 25)),
-             ("trending", lambda: query.trending(con)),
-             ("new this week", lambda: query.new_since(con)),
-             ("package advisory", lambda: query.advisory_search(con, package="lodash", ecosystem="npm")))
+    cases = (
+        ("cve lookup", lambda: query.get_cve(con, cid)),
+        ("full-text search", lambda: query.search(con, "remote code execution", limit=20)),
+        ("broad search", lambda: query.search(con, "vuln", limit=20)),
+        ("search --cwe", lambda: query.search(con, cwe="CWE-79", limit=20)),
+        ("product + version", lambda: query.products(con, "nginx", "1.18.0")),
+        ("KEV list", lambda: query.kev_list(con, None, 25)),
+        ("trending", lambda: query.trending(con)),
+        ("new this week", lambda: query.new_since(con)),
+        ("package advisory", lambda: query.advisory_search(con, package="lodash", ecosystem="npm")),
+        ("stats", lambda: query.stats(con)),
+    )
     results = []
     for name, fn in cases:
         times = []
@@ -721,19 +887,26 @@ def cmd_bench(args) -> None:
             t0 = time.perf_counter()
             try:
                 fn()
-            except (KeyError, sqlite3.Error):   # a lite index may lack the table or row
+            except (KeyError, sqlite3.Error):  # a lite index may lack the table or row
                 times = []
                 break
             times.append((time.perf_counter() - t0) * 1000)
         times.sort()
-        results.append({"query": name, "median_ms": round(times[len(times) // 2], 2) if times else None,
-                        "best_ms": round(times[0], 2) if times else None})
+        results.append(
+            {
+                "query": name,
+                "median_ms": round(times[len(times) // 2], 2) if times else None,
+                "best_ms": round(times[0], 2) if times else None,
+            }
+        )
     n = con.execute("SELECT count(*) FROM cve").fetchone()[0]
     if args.json:
         out_json({"cves": n, "db_bytes": paths.DB.stat().st_size, "runs": args.runs, "results": results})
         return
-    print(f"{BOLD}⚡ bench{RST} {DIM}- {n:,} CVEs · {datasets.human(paths.DB.stat().st_size)} · "
-          f"median of {args.runs} runs{RST}\n")
+    print(
+        f"{BOLD}⚡ bench{RST} {DIM}- {n:,} CVEs · {datasets.human(paths.DB.stat().st_size)} · "
+        f"median of {args.runs} runs{RST}\n"
+    )
     top = max((r["median_ms"] or 0 for r in results), default=1) or 1
     for r in results:
         if r["median_ms"] is None:
@@ -805,20 +978,26 @@ def cmd_sync(args) -> None:
     else:
         items = datasets.plan(
             only=[s for s in (args.only or "").split(",") if s] or None,
-            years=years, with_extra=args.extra, with_bulk=args.bulk)
+            years=years,
+            with_extra=args.extra,
+            with_bulk=args.bulk,
+        )
     if not items:
         die("nothing selected")
-    print(f"syncing {len(items)} datasets -> {paths.DATA}"
-          + (f" (tier {args.tier})" if getattr(args, "tier", None) else ""))
+    print(
+        f"syncing {len(items)} datasets -> {paths.DATA}"
+        + (f" (tier {args.tier})" if getattr(args, "tier", None) else "")
+    )
     pending = [d.name for d in items]
     with Spinner("downloading") as sp:
+
         def progress(r: dict) -> None:
             pending.remove(r["name"])
             sp.label = f"downloading {len(items) - len(pending)}/{len(items)}: {', '.join(pending)}"
             _report(r, sp.say)
+
         sp.label = f"downloading 0/{len(items)}: {', '.join(pending)}"
-        results = datasets.sync(items, force=args.force, jobs=args.jobs,
-                                pull=args.pull, progress=progress)
+        results = datasets.sync(items, force=args.force, jobs=args.jobs, pull=args.pull, progress=progress)
     optional = {d.name for d in items if d.optional}
     bad = [r for r in results if r["status"] == "FAIL" and r["name"] not in optional]
     soft = [r["name"] for r in results if r["status"] == "FAIL" and r["name"] in optional]
@@ -835,12 +1014,15 @@ def cmd_pack(args) -> None:
     if not doc["datasets"]:
         die("nothing synced to pack - run: crowbar sync")
     total = sum(e["bytes"] for e in doc["datasets"].values())
-    print(f"packed {len(doc['datasets'])} datasets ({datasets.human(total)}) -> {out}\n"
-          f"upload every file in it, then point users at it: CROWBAR_MIRROR=<url of that folder>")
+    print(
+        f"packed {len(doc['datasets'])} datasets ({datasets.human(total)}) -> {out}\n"
+        f"upload every file in it, then point users at it: CROWBAR_MIRROR=<url of that folder>"
+    )
 
 
 def cmd_build(args) -> None:
     from . import indexer
+
     if not paths.DATA.exists() or not any(paths.DATA.iterdir()):
         die("no data - run: crowbar sync")
     _writer_lock()
@@ -848,27 +1030,42 @@ def cmd_build(args) -> None:
         _record_tier(args.tier)
         missing = datasets.tier_missing(args.tier)
         if missing and not getattr(args, "allow_incomplete", False):
-            die(f"tier {args.tier} is missing {', '.join(missing)} - nothing to build yet. "
-                f"Run: crowbar sync --tier {args.tier} --force   (or build --allow-incomplete)")
+            die(
+                f"tier {args.tier} is missing {', '.join(missing)} - nothing to build yet. "
+                f"Run: crowbar sync --tier {args.tier} --force   (or build --allow-incomplete)"
+            )
         if missing:
-            print(f"{YEL}WARNING: building an incomplete {args.tier} index "
-                  f"(missing {', '.join(missing)}){RST}", file=sys.stderr)
+            print(
+                f"{YEL}WARNING: building an incomplete {args.tier} index (missing {', '.join(missing)}){RST}",
+                file=sys.stderr,
+            )
     if args.json:
-        stats = indexer.build(quick=args.quick, with_extra=args.extra, with_bulk=args.bulk,
-                              progress=lambda msg: print(msg, file=sys.stderr))
+        stats = indexer.build(
+            quick=args.quick,
+            with_extra=args.extra,
+            with_bulk=args.bulk,
+            progress=lambda msg: print(msg, file=sys.stderr),
+        )
     else:
         with Spinner("building index") as sp:
-            stats = indexer.build(quick=args.quick, with_extra=args.extra, with_bulk=args.bulk,
-                                  progress=lambda msg: sp.say(f"  {GRN}✓{RST} {msg}"))
+            stats = indexer.build(
+                quick=args.quick,
+                with_extra=args.extra,
+                with_bulk=args.bulk,
+                progress=lambda msg: sp.say(f"  {GRN}✓{RST} {msg}"),
+            )
     if args.json:
         out_json(stats)
         return
-    print(f"\nbuilt {stats['cve']:,} CVEs · {stats.get('cpe_match', 0):,} CPE ranges · "
-          f"{datasets.human(stats['db_bytes'])} in {stats['build_seconds']}s")
+    print(
+        f"\nbuilt {stats['cve']:,} CVEs · {stats.get('cpe_match', 0):,} CPE ranges · "
+        f"{datasets.human(stats['db_bytes'])} in {stats['build_seconds']}s"
+    )
 
 
 def cmd_update(args) -> None:
     from . import indexer
+
     if args.if_mounted and not _mounted():
         return
     _writer_lock()
@@ -888,15 +1085,36 @@ def cmd_update(args) -> None:
 def _update(args, indexer) -> None:
     status = datasets.index_status()
     tier = status["tier"]
-    if status["stale"] and args.no_sync:
-        print(f"{YEL}index is {status['age_days']} days old: past the 8-day NVD change feed, "
-              f"so CVEs changed in the gap stay stale until a run without --no-sync{RST}", file=sys.stderr)
-    elif status["stale"]:
+    try:
+        con = db.connect()
+    except db.NotIndexed:
+        rebuild = None
+    else:
+        rebuild = db.schema_error(con)  # another schema cannot be updated in place
+        con.close()
+    if status["stale"] and args.no_sync and not rebuild:
+        print(
+            f"{YEL}index is {status['age_days']} days old: past the 8-day NVD change feed, "
+            f"so CVEs changed in the gap stay stale until a run without --no-sync{RST}",
+            file=sys.stderr,
+        )
+    elif status["stale"] or rebuild:
         # the modified feed only reaches back 8 days: re-sync and rebuild to close the gap
-        ns = argparse.Namespace(tier=tier, years=None, only=None, force=False, jobs=args.jobs,
-                                pull=False, allow_incomplete=True, quick=False, extra=args.extra,
-                                bulk=False, json=args.json)
-        cmd_sync(ns)
+        ns = argparse.Namespace(
+            tier=tier,
+            years=None,
+            only=None,
+            force=False,
+            jobs=args.jobs,
+            pull=False,
+            allow_incomplete=True,
+            quick=False,
+            extra=args.extra,
+            bulk=False,
+            json=args.json,
+        )
+        if not args.no_sync:
+            cmd_sync(ns)
         cmd_build(ns)
         return
     groups = ["nvd", "kev", "epss", "exploitdb", "models", "cveorg", "poc", "chatter"]
@@ -904,15 +1122,15 @@ def _update(args, indexer) -> None:
         groups += ["nuclei", "metasploit", "attack", "cwe", "capec"]
     if tier and tier != "extreme":
         groups = [g for g in groups if g in datasets.tier_groups(tier)]
-    items = [d for d in datasets.plan(with_extra=args.extra)
-             if d.group in groups and d.name != "nvd-2002"]
+    items = [d for d in datasets.plan(with_extra=args.extra) if d.group in groups and d.name != "nvd-2002"]
     # only the incremental NVD feeds here; year snapshots are for `crowbar build`
     items = [d for d in items if not (d.group == "nvd" and d.name not in ("nvd-recent", "nvd-modified"))]
     if not args.no_sync:
         if not args.quiet:
             print(f"syncing {len(items)} datasets")
-        results = datasets.sync(items, jobs=args.jobs, pull=args.deep,
-                                progress=None if args.quiet else _report)
+        results = datasets.sync(
+            items, jobs=args.jobs, pull=args.deep, progress=None if args.quiet else _report
+        )
         # re-indexing old files would stamp a stale index as fresh and hide the gap
         # from the 8-day catch-up above
         nvd = [r for r in results if r["name"] == "nvd-modified" and r["status"] == "FAIL"]
@@ -922,67 +1140,93 @@ def _update(args, indexer) -> None:
     if args.json:
         out_json(stats)
     elif not args.quiet:
-        print(f"updated {stats['rows_touched']} CVE rows in {stats['seconds']}s "
-              f"({stats['cve']:,} total)")
+        print(f"updated {stats['rows_touched']} CVE rows in {stats['seconds']}s ({stats['cve']:,} total)")
 
 
 def cmd_doctor(args) -> None:
-    ok = True
-    print(f"{BOLD}crowbar doctor{RST}")
-    print(f"  python    {sys.version.split()[0]}")
-    print(f"  root      {paths.ROOT}")
-    print(f"  drive     {'yes' if paths.is_drive_root() else 'no'}")
+    """Health check; `--json` gives agents the same facts, exit 1 = needs attention."""
+    r: dict = {
+        "python": sys.version.split()[0],
+        "root": str(paths.ROOT),
+        "drive": paths.is_drive_root(),
+        "problems": [],
+    }
     if paths.HOME_LINK.is_symlink():
-        print(f"  home link {paths.HOME_LINK} -> {os.readlink(paths.HOME_LINK)}")
-    if not paths.DB.exists():
-        print("  index     MISSING - run: crowbar sync && crowbar build")
-        sys.exit(1)
-    con = db.connect()
-    ver = db.schema_version(con)
-    print(f"  schema    v{ver} {'ok' if ver == paths.SCHEMA_VERSION else 'MISMATCH - rebuild'}")
-    ok = ok and ver == paths.SCHEMA_VERSION
-    _integ = con.execute("PRAGMA quick_check").fetchone()[0]
-    print(f"  integrity {_integ}")
-    ok = ok and _integ == "ok"
-    s = query.stats(con)
-    print(f"  cves      {s.get('cve', 0):,} · kev {s.get('cve_kev', 0):,} · "
-          f"exploits {s.get('cve_with_exploit', 0):,} · cpe ranges {s.get('cpe_match', 0):,}")
+        r["home_link"] = os.readlink(paths.HOME_LINK)
+    if paths.DB.exists():
+        con = db.connect()
+        r["schema"] = db.schema_version(con)
+        r["integrity"] = con.execute("PRAGMA quick_check").fetchone()[0]
+        s = query.stats(con)
+        r["counts"] = {k: s.get(k, 0) for k in ("cve", "cve_kev", "cve_with_exploit", "cpe_match")}
+        if db.schema_error(con):
+            r["problems"].append(db.schema_error(con))
+        if r["integrity"] != "ok":
+            r["problems"].append(f"integrity: {r['integrity']}")
+    else:
+        r["problems"].append("index missing - run: crowbar sync && crowbar build")
     m = datasets.load_manifest()
-    missing = [v["path"] for v in m.get("datasets", {}).values() if not (paths.DATA / v["path"]).exists()]
-    print(f"  datasets  {len(m.get('datasets', {}))} tracked, {len(missing)} missing")
-    if m.get("tier"):
-        print(f"  tier      {m['tier']} ({datasets.TIER_SIZES.get(m['tier'], '?')})")
-        incomplete = datasets.tier_missing(m["tier"])
+    r["datasets"] = len(m.get("datasets", {}))
+    r["missing"] = [
+        v["path"] for v in m.get("datasets", {}).values() if not (paths.DATA / v["path"]).exists()
+    ]
+    r["tier"] = m.get("tier")
+    if r["tier"]:
+        incomplete = datasets.tier_missing(r["tier"])
         if incomplete:
-            ok = False
-            shown = ", ".join(incomplete[:6]) + (" …" if len(incomplete) > 6 else "")
-            print(f"  {YEL}incomplete - tier {m['tier']} is missing {len(incomplete)} "
-                  f"dataset(s): {shown}{RST}")
-            print(f"  {YEL}re-run: crowbar sync --tier {m['tier']} && crowbar build --tier {m['tier']}{RST}")
-    for p in missing[:5]:
-        print(f"    {DIM}missing {p}{RST}")
+            r["problems"].append(
+                f"tier {r['tier']} is missing {', '.join(incomplete[:6])}"
+                f"{' …' if len(incomplete) > 6 else ''} - re-run: crowbar sync --tier "
+                f"{r['tier']} && crowbar build --tier {r['tier']}"
+            )
     if paths.HOME_LINK.is_symlink() and paths.HOME_LINK.exists():
         try:
             (paths.HOME_LINK / "index/state.json").read_text()
         except OSError:
-            print(f"  {YEL}drive unreadable by this process - for the launchd agent,"
-                  f" grant Full Disk Access to /bin/sh{RST}")
-    fresh = datasets.index_status()
-    if fresh["age_days"] is not None:
-        print(f"  fresh     {fresh['age_days']} days since update"
-              f"{'' if fresh['auto_update'] else ' (auto-update off)'}")
-        if fresh["stale"]:
+            r["problems"].append(
+                "drive unreadable by this process - for the launchd agent, grant Full Disk Access to /bin/sh"
+            )
+    r["fresh"] = datasets.index_status() if paths.DB.exists() else None
+    if r["fresh"] and r["fresh"]["last_error"]:
+        r["problems"].append(
+            f"last update failed {r['fresh']['last_error']['at']}: {r['fresh']['last_error']['error']}"
+        )
+    r["disk_free"] = shutil.disk_usage(paths.ROOT).free
+    r["ok"] = not r["problems"]
+    if args.json:
+        out_json(r)
+        sys.exit(0 if r["ok"] else 1)
+    print(f"{BOLD}crowbar doctor{RST}")
+    print(f"  python    {r['python']}\n  root      {r['root']}\n  drive     {'yes' if r['drive'] else 'no'}")
+    if "home_link" in r:
+        print(f"  home link {paths.HOME_LINK} -> {r['home_link']}")
+    if "schema" in r:
+        c = r["counts"]
+        print(f"  schema    v{r['schema']} {'ok' if r['schema'] == paths.SCHEMA_VERSION else 'MISMATCH'}")
+        print(f"  integrity {r['integrity']}")
+        print(
+            f"  cves      {c['cve']:,} · kev {c['cve_kev']:,} · exploits {c['cve_with_exploit']:,}"
+            f" · cpe ranges {c['cpe_match']:,}"
+        )
+    print(f"  datasets  {r['datasets']} tracked, {len(r['missing'])} missing")
+    if r["tier"]:
+        print(f"  tier      {r['tier']} ({datasets.TIER_SIZES.get(r['tier'], '?')})")
+    for p in r["missing"][:5]:
+        print(f"    {DIM}missing {p}{RST}")
+    f = r["fresh"]
+    if f and f["age_days"] is not None:
+        print(
+            f"  fresh     {f['age_days']} days since update{'' if f['auto_update'] else ' (auto-update off)'}"
+        )
+        if f["stale"]:
             print(f"  {YEL}stale - run: crowbar update{RST}")
-        if fresh["last_error"]:
-            ok = False
-            print(f"  {YEL}last update failed {fresh['last_error']['at']}: "
-                  f"{fresh['last_error']['error']}{RST}")
-    free = shutil.disk_usage(paths.ROOT).free
-    print(f"  disk      {datasets.human(free)} free")
-    if free < 3 * 1024 ** 3:
+    print(f"  disk      {datasets.human(r['disk_free'])} free")
+    if r["disk_free"] < 3 * 1024**3:
         print(f"  {YEL}low disk - index rebuild needs ~2x current db size{RST}")
-    print(f"\n{'ready' if ok else 'needs attention'}")
-    sys.exit(0 if ok else 1)
+    for problem in r["problems"]:
+        print(f"  {YEL}{problem}{RST}")
+    print(f"\n{'ready' if r['ok'] else 'needs attention'}")
+    sys.exit(0 if r["ok"] else 1)
 
 
 # ---------------------------------------------------------------- project links
@@ -1010,7 +1254,7 @@ def cmd_link(args) -> None:
         skill_dst.symlink_to(paths.SKILL, target_is_directory=True)
 
     print(f"linked {link} -> {src}")
-    print("  cli    .crowbar/bin/crowbar search \"...\"")
+    print('  cli    .crowbar/bin/crowbar search "..."')
     print("  docs   .crowbar/AGENTS.md")
     print(f"  remove crowbar unlink {target}")
 
@@ -1038,8 +1282,18 @@ def _mounted() -> bool:
     return paths.ROOT.exists()
 
 
-CODE = ["bin", "crowbar", "mcp", "scripts", "docs", ".opencode",
-        "AGENTS.md", "README.md", "Makefile", ".gitignore"]
+CODE = [
+    "bin",
+    "crowbar",
+    "mcp",
+    "scripts",
+    "docs",
+    ".opencode",
+    "AGENTS.md",
+    "README.md",
+    "Makefile",
+    ".gitignore",
+]
 
 
 def _copy_db(src: pathlib.Path, dst: pathlib.Path) -> None:
@@ -1087,8 +1341,7 @@ def _verify(vault: pathlib.Path) -> list[tuple[str, str]]:
     else:
         try:
             con = sqlite3.connect(db.ro_uri(dbf), uri=True)
-            tabs = {r[0] for r in con.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'")}
+            tabs = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
             if "cve" not in tabs:
                 bad.append(("crowbar.db", "no schema - empty or wrong DB; rebuild"))
             elif con.execute("SELECT count(*) FROM cve").fetchone()[0] == 0:
@@ -1097,6 +1350,7 @@ def _verify(vault: pathlib.Path) -> list[tuple[str, str]]:
         except sqlite3.DatabaseError as exc:
             bad.append(("crowbar.db", f"unreadable: {exc}"))
     import json as _json
+
     man = vault / "index/manifest.json"
     if man.exists():
         for name, rec in _json.loads(man.read_text()).get("datasets", {}).items():
@@ -1111,8 +1365,13 @@ def _verify(vault: pathlib.Path) -> list[tuple[str, str]]:
 def cmd_verify(args) -> None:
     problems = _verify(paths.ROOT)
     if args.json:
-        out_json({"root": str(paths.ROOT), "ok": not problems,
-                  "problems": [{"dataset": n, "issue": i} for n, i in problems]})
+        out_json(
+            {
+                "root": str(paths.ROOT),
+                "ok": not problems,
+                "problems": [{"dataset": n, "issue": i} for n, i in problems],
+            }
+        )
         return
     if not problems:
         print(f"{GRN}ok{RST} - index and all datasets match the manifest ({paths.ROOT})")
@@ -1231,11 +1490,10 @@ def cmd_setup_drive(args) -> None:
             continue
         dst = vault / name
         if src.is_dir():
-            shutil.copytree(src, dst, dirs_exist_ok=True)   # refresh code in place
+            shutil.copytree(src, dst, dirs_exist_ok=True)  # refresh code in place
         else:
             shutil.copy2(src, dst)
-    (vault / paths.DRIVE_MARKER).write_text(
-        f"crowbar drive\ncreated {time.strftime('%Y-%m-%d')}\n")
+    (vault / paths.DRIVE_MARKER).write_text(f"crowbar drive\ncreated {time.strftime('%Y-%m-%d')}\n")
 
     if not args.no_data:
         data_src, data_dst = paths.DATA, vault / "data"
@@ -1259,18 +1517,26 @@ def cmd_setup_drive(args) -> None:
 
         # verify and repair any file that was re-written while copying
         import json as _json
-        man = _json.loads((idx_dst / "manifest.json").read_text()).get("datasets", {}) \
-            if (idx_dst / "manifest.json").exists() else {}
+
+        man = (
+            _json.loads((idx_dst / "manifest.json").read_text()).get("datasets", {})
+            if (idx_dst / "manifest.json").exists()
+            else {}
+        )
         for name, rec in man.items():
             src_file, dst_file = paths.DATA / rec["path"], data_dst / rec["path"]
-            if rec.get("sha256") and src_file.exists() and dst_file.exists() \
-                    and datasets.sha256(dst_file) != rec["sha256"]:
+            if (
+                rec.get("sha256")
+                and src_file.exists()
+                and dst_file.exists()
+                and datasets.sha256(dst_file) != rec["sha256"]
+            ):
                 print(f"repairing {name}")
                 shutil.copy2(src_file, dst_file)
 
     (vault / "START-HERE.md").write_text(
-        START_HERE.format(date=time.strftime("%Y-%m-%d"),
-                          size=datasets.human(_du(vault))))
+        START_HERE.format(date=time.strftime("%Y-%m-%d"), size=datasets.human(_du(vault)))
+    )
 
     link = paths.HOME_LINK
     if link.is_symlink() or link.exists():
@@ -1328,26 +1594,32 @@ exit 0
 def _write_wrapper() -> pathlib.Path:
     wrapper = pathlib.Path.home() / ".local/bin/crowbar-autoupdate"
     wrapper.parent.mkdir(parents=True, exist_ok=True)
-    wrapper.write_text(WRAPPER.format(root=paths.ROOT, python=sys.executable,
-                                      pkg=pathlib.Path(__file__).resolve().parents[1]))
+    wrapper.write_text(
+        WRAPPER.format(
+            root=paths.ROOT, python=sys.executable, pkg=pathlib.Path(__file__).resolve().parents[1]
+        )
+    )
     wrapper.chmod(0o755)
     return wrapper
 
 
 def cmd_install_agent(args) -> None:
     if pathlib.Path("/run/current-system").exists():
-        print(f"{YEL}note:{RST} this machine is managed by nix. "
-              f"Declaring the agent in home-manager is cleaner - see docs/NIX.md.", file=sys.stderr)
+        print(
+            f"{YEL}note:{RST} this machine is managed by nix. "
+            f"Declaring the agent in home-manager is cleaner - see docs/NIX.md.",
+            file=sys.stderr,
+        )
     wrapper = _write_wrapper()
     if sys.platform == "darwin":
         plist = pathlib.Path.home() / "Library/LaunchAgents/sh.crowbar.update.plist"
         plist.parent.mkdir(parents=True, exist_ok=True)
         log = pathlib.Path.home() / "Library/Logs/crowbar.log"
         plist.write_text(PLIST.format(wrapper=wrapper, interval=args.interval, log=log))
-        subprocess.run(["launchctl", "bootout", f"gui/{os.getuid()}", str(plist)],
-                       capture_output=True)
-        res = subprocess.run(["launchctl", "bootstrap", f"gui/{os.getuid()}", str(plist)],
-                             capture_output=True, text=True)
+        subprocess.run(["launchctl", "bootout", f"gui/{os.getuid()}", str(plist)], capture_output=True)
+        res = subprocess.run(
+            ["launchctl", "bootstrap", f"gui/{os.getuid()}", str(plist)], capture_output=True, text=True
+        )
         if res.returncode != 0:
             die(f"launchctl: {res.stderr.strip()}")
         print(f"launchd agent installed: {plist}")
@@ -1355,15 +1627,13 @@ def cmd_install_agent(args) -> None:
         print(f"  every {args.interval}s and whenever /Volumes changes")
         print(f"  log: {log}")
     else:
-        print("add to crontab -e:\n"
-              f"  */{max(1, args.interval // 60)} * * * * {wrapper}")
+        print(f"add to crontab -e:\n  */{max(1, args.interval // 60)} * * * * {wrapper}")
 
 
 def cmd_uninstall_agent(args) -> None:
     if sys.platform == "darwin":
         plist = pathlib.Path.home() / "Library/LaunchAgents/sh.crowbar.update.plist"
-        subprocess.run(["launchctl", "bootout", f"gui/{os.getuid()}", str(plist)],
-                       capture_output=True)
+        subprocess.run(["launchctl", "bootout", f"gui/{os.getuid()}", str(plist)], capture_output=True)
         if plist.exists():
             plist.unlink()
     wrapper = pathlib.Path.home() / ".local/bin/crowbar-autoupdate"
@@ -1415,8 +1685,11 @@ def cmd_connect(args) -> None:
 
     # opencode: write the config file and install the skill
     block = {"type": "local", "command": cmd, "enabled": True, "timeout": 15000}
-    target = (pathlib.Path.home() / ".config/opencode/opencode.json"
-              if args.global_ else pathlib.Path(args.target).resolve())
+    target = (
+        pathlib.Path.home() / ".config/opencode/opencode.json"
+        if args.global_
+        else pathlib.Path(args.target).resolve()
+    )
     cfg = {}
     if target.exists():
         try:
@@ -1438,13 +1711,17 @@ def cmd_connect(args) -> None:
 
 def cmd_mcp(args) -> None:
     from . import mcp
+
     mcp.serve()
 
 
 # ---------------------------------------------------------------- parser
 def build_parser() -> argparse.ArgumentParser:
     from crowbar import __version__
-    p = argparse.ArgumentParser(prog="crowbar", description="crowbar - local vulnerability index (terminal only)")
+
+    p = argparse.ArgumentParser(
+        prog="crowbar", description="crowbar - local vulnerability index (terminal only)"
+    )
     p.add_argument("--version", action="version", version=f"crowbar {__version__}")
     p.add_argument("--width", type=int, default=110)
     p.set_defaults(fn=cmd_home)
@@ -1490,7 +1767,9 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--limit", type=int, default=25)
     s.add_argument("--json", action="store_true")
 
-    s = add("trending", cmd_trending, "CVEs people are posting about (HN, mailing lists, ZDI, Mastodon, EUVD)")
+    s = add(
+        "trending", cmd_trending, "CVEs people are posting about (HN, mailing lists, ZDI, Mastodon, EUVD)"
+    )
     s.add_argument("--days", type=float, default=7)
     s.add_argument("--limit", type=int, default=25)
     s.add_argument("--json", action="store_true")
@@ -1510,19 +1789,20 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--limit", type=int, default=25)
     s.add_argument("--json", action="store_true")
 
-    s = add("exploit", cmd_exploit, "search Exploit-DB, or fetch one by id")
+    s = add("exploit", cmd_exploit, "search Exploit-DB, or show one by id")
     s.add_argument("query")
+    s.add_argument("--fetch", action="store_true", help="download the source for an id")
     s.add_argument("--limit", type=int, default=20)
     s.add_argument("--json", action="store_true")
 
     s = add("nuclei", cmd_nuclei, "search Nuclei templates")
-    s.add_argument("query")
+    s.add_argument("query", nargs="?")
     s.add_argument("--domain", help="http, network, dns, file, headless, cloud, javascript, ssl, code")
     s.add_argument("--limit", type=int, default=20)
     s.add_argument("--json", action="store_true")
 
     s = add("msf", cmd_msf, "search Metasploit modules")
-    s.add_argument("query")
+    s.add_argument("query", nargs="?")
     s.add_argument("--limit", type=int, default=30)
     s.add_argument("--json", action="store_true")
 
@@ -1533,7 +1813,7 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--json", action="store_true")
 
     s = add("attack", cmd_attack, "MITRE ATT&CK techniques")
-    s.add_argument("query")
+    s.add_argument("query", nargs="?")
     s.add_argument("--domain", choices=["enterprise", "mobile", "ics"])
     s.add_argument("--limit", type=int, default=10)
     s.add_argument("--json", action="store_true")
@@ -1570,7 +1850,7 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--json", action="store_true")
 
     s = add("bin", cmd_bin, "GTFOBins / LOLBAS / PayloadsAllTheThings")
-    s.add_argument("query")
+    s.add_argument("query", nargs="?")
     s.add_argument("--source", choices=["gtfobins", "lolbas", "payloads"])
     s.add_argument("--limit", type=int, default=25)
     s.add_argument("--json", action="store_true")
@@ -1606,11 +1886,15 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--json", action="store_true")
 
     add("where", cmd_where, "print paths").add_argument("--json", action="store_true")
-    add("doctor", cmd_doctor, "health check")
+    s = add("doctor", cmd_doctor, "health check")
+    s.add_argument("--json", action="store_true")
 
     s = add("sync", cmd_sync, "download datasets")
-    s.add_argument("--tier", choices=datasets.TIER_NAMES,
-                   help="size tier: lite ~150MB, medium ~500MB, heavy ~2GB, extreme full (each a superset)")
+    s.add_argument(
+        "--tier",
+        choices=datasets.TIER_NAMES,
+        help="size tier: lite ~150MB, medium ~500MB, heavy ~2GB, extreme full (each a superset)",
+    )
     s.add_argument("--only")
     s.add_argument("--years")
     s.add_argument("--extra", action="store_true", help="ATT&CK mobile/ics + CISA Vulnrichment")
@@ -1623,8 +1907,12 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("dir")
 
     s = add("build", cmd_build, "build the index from downloaded data")
-    s.add_argument("--tier", choices=datasets.TIER_NAMES, help="record the size tier this index was built for")
-    s.add_argument("--allow-incomplete", action="store_true", help="build even if some tier datasets are missing")
+    s.add_argument(
+        "--tier", choices=datasets.TIER_NAMES, help="record the size tier this index was built for"
+    )
+    s.add_argument(
+        "--allow-incomplete", action="store_true", help="build even if some tier datasets are missing"
+    )
     s.add_argument("--quick", action="store_true", help="CVEs + exploits only")
     s.add_argument("--extra", action="store_true")
     s.add_argument("--bulk", action="store_true")
@@ -1665,8 +1953,12 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--interval", type=int, default=60)
 
     s = add("connect", cmd_connect, "register the MCP server with an agent host")
-    s.add_argument("--host", choices=["opencode", "claude", "codex", "cursor", "gemini", "print"],
-                   default="opencode", help="which agent host to wire up (default: opencode)")
+    s.add_argument(
+        "--host",
+        choices=["opencode", "claude", "codex", "cursor", "gemini", "print"],
+        default="opencode",
+        help="which agent host to wire up (default: opencode)",
+    )
     s.add_argument("--local", action="store_true", help="launch from this source checkout instead of uvx")
     s.add_argument("--target", default=str(paths.ROOT.parent / "opencode.json"))
     s.add_argument("--global", dest="global_", action="store_true")
@@ -1689,7 +1981,7 @@ def main() -> None:
         die(str(exc))
     except ValueError as exc:
         die(str(exc))
-    except OSError as exc:   # network or disk: a message, not a traceback
+    except OSError as exc:  # network or disk: a message, not a traceback
         die(f"{type(exc).__name__}: {exc}")
 
 

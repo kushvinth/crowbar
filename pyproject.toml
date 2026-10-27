@@ -44,6 +44,7 @@ include = ["crowbar", "mcp", "scripts", "tests", "docs", "README.md", "LICENSE",
 
 [tool.ruff]
 target-version = "py311"
+line-length = 110   # the width the code was written to
 
 [tool.ruff.lint]
 # ruff's defaults, pinned so CI and local runs agree

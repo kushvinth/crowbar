@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """crowbar MCP server (stdio). Kept at this path for existing opencode configs."""
+
 import pathlib
 import sys
 
