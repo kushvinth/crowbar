@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.6](https://github.com/kushvinth/crowbar/compare/v0.1.5...v0.1.6) (2026-10-27)
+
+
+### Performance Improvements
+
+* faster search and updates, persistent MCP connection, schema v4 ([#16](https://github.com/kushvinth/crowbar/issues/16)) ([364af7d](https://github.com/kushvinth/crowbar/commit/364af7dba230a38df8fa6cef0907b78c67b0c940))
+
 ## [0.1.5](https://github.com/kushvinth/crowbar/compare/v0.1.4...v0.1.5) (2026-10-26)
 
 
