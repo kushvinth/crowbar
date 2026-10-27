@@ -198,7 +198,9 @@ SOURCES = [
         "oracle/cpu.html",
         "html",
         "Oracle Critical Patch Update index.",
-        headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/126 Safari/537.36"},
+        headers={
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/126 Safari/537.36"
+        },
     ),
 ]
 
@@ -301,8 +303,7 @@ def download(src: dict, force: bool = False) -> dict:
                         rate = done / max(time.time() - t0, 0.1)
                         pct = f"{done * 100 / total:5.1f}%" if total else "     "
                         print(
-                            f"\r  get     {src['name']:<22} {pct} {human(done):>9} "
-                            f"{human(int(rate))}/s",
+                            f"\r  get     {src['name']:<22} {pct} {human(done):>9} {human(int(rate))}/s",
                             end="",
                             flush=True,
                         )

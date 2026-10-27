@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """End-to-end sanity checks. Exit 0 = healthy.  Usage: python3 scripts/selftest.py"""
+
 from __future__ import annotations
 
 import json
@@ -71,30 +72,38 @@ def main() -> int:
     check("cna records", cna > 100_000, f"{cna:,}")
     pocs = con.execute("SELECT count(*) FROM poc").fetchone()[0]
     check("public pocs", pocs > 1_000, f"{pocs:,}")
-    check("poc-linked cves",
-          con.execute("SELECT count(*) FROM cve_meta WHERE has_poc=1").fetchone()[0] > 1_000)
-    check("source provenance",
-          con.execute("SELECT count(*) FROM source_state").fetchone()[0] > 0)
+    check(
+        "poc-linked cves", con.execute("SELECT count(*) FROM cve_meta WHERE has_poc=1").fetchone()[0] > 1_000
+    )
+    check("source provenance", con.execute("SELECT count(*) FROM source_state").fetchone()[0] > 0)
     check("poc search", len(query.poc_search(con, "log4j", limit=3)) > 0)
-    check("no nvd clobber",
-          con.execute("SELECT count(*) FROM cve WHERE description IS NULL OR description=''")
-          .fetchone()[0] == 0)
+    check(
+        "no nvd clobber",
+        con.execute("SELECT count(*) FROM cve WHERE description IS NULL OR description=''").fetchone()[0]
+        == 0,
+    )
     con.close()
 
     # MCP handshake
-    msgs = ('{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n'
-            '{"jsonrpc":"2.0","id":2,"method":"tools/list"}\n'
-            '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":'
-            '{"name":"cb_stats","arguments":{}}}\n')
-    res = subprocess.run([sys.executable, str(ROOT / "mcp/server.py")], input=msgs,
-                         capture_output=True, text=True, timeout=120)
+    msgs = (
+        '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n'
+        '{"jsonrpc":"2.0","id":2,"method":"tools/list"}\n'
+        '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":'
+        '{"name":"cb_stats","arguments":{}}}\n'
+    )
+    res = subprocess.run(
+        [sys.executable, str(ROOT / "mcp/server.py")], input=msgs, capture_output=True, text=True, timeout=120
+    )
     out = {json.loads(ln)["id"]: json.loads(ln) for ln in res.stdout.splitlines() if ln.strip()}
     check("mcp initialize", out.get(1, {}).get("result", {}).get("serverInfo", {}).get("name") == "crowbar")
     tools = {t["name"] for t in out.get(2, {}).get("result", {}).get("tools", [])}
-    check("mcp tools", len(tools) >= 18 and {"cb_os", "cb_advisory", "cb_code",
-                                              "cb_binary", "cb_debian", "cb_tables",
-                                              "cb_poc", "cb_sources"} <= tools,
-          f"{len(tools)} tools")
+    check(
+        "mcp tools",
+        len(tools) >= 18
+        and {"cb_os", "cb_advisory", "cb_code", "cb_binary", "cb_debian", "cb_tables", "cb_poc", "cb_sources"}
+        <= tools,
+        f"{len(tools)} tools",
+    )
     check("mcp stats", out.get(3, {}).get("result", {}).get("isError") is False)
 
     # link / unlink in a scratch project
@@ -102,11 +111,18 @@ def main() -> int:
         subprocess.run([sys.executable, str(HV), "link", tmp], capture_output=True, check=True)
         link = pathlib.Path(tmp) / ".crowbar"
         from crowbar.cli import _find_home
-        check("link creates symlink",
-              link.is_symlink() and link.resolve() == _find_home().resolve(),
-              str(link.resolve()))
-        r = subprocess.run([str(link / "bin" / "hv"), "search", "openssl", "--limit", "1", "--json"],
-                           capture_output=True, text=True, timeout=60)
+
+        check(
+            "link creates symlink",
+            link.is_symlink() and link.resolve() == _find_home().resolve(),
+            str(link.resolve()),
+        )
+        r = subprocess.run(
+            [str(link / "bin" / "hv"), "search", "openssl", "--limit", "1", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
         check("linked cli works", r.returncode == 0 and json.loads(r.stdout or "[]"))
         subprocess.run([sys.executable, str(HV), "unlink", tmp], capture_output=True, check=True)
         check("unlink removes symlink", not link.exists() and not link.is_symlink())

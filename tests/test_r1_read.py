@@ -1,5 +1,6 @@
 """Round r1 agent 3: read-path tests - connection PRAGMAs, hot-journal recovery,
 persistent MCP connection and the FTS top-N relevance search."""
+
 from __future__ import annotations
 
 import contextlib
@@ -53,8 +54,9 @@ class TestConnect(unittest.TestCase):
         must still work and must see the pre-write data."""
         home, dbf = support.make_fixture_home()
         paths.DB = dbf
-        before = support.one(sqlite3.connect(db.ro_uri(dbf), uri=True),
-                             "SELECT description FROM cve WHERE id='CVE-2021-44228'")
+        before = support.one(
+            sqlite3.connect(db.ro_uri(dbf), uri=True), "SELECT description FROM cve WHERE id='CVE-2021-44228'"
+        )
         # a 2-page cache spills the dirty pages into the DB file, so the rollback matters
         code = (
             "import sqlite3, sys, time\n"
@@ -63,7 +65,8 @@ class TestConnect(unittest.TestCase):
             "for _ in range(200):\n"
             "    c.execute(\"UPDATE cve SET description = description || ' CLOBBERED'\")\n"
             "c.execute(\"UPDATE cve_fts SET description = description || ' CLOBBERED'\")\n"
-            "print('ok', flush=True); time.sleep(60)\n")
+            "print('ok', flush=True); time.sleep(60)\n"
+        )
         proc = subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.PIPE, text=True)
         try:
             self.assertEqual(proc.stdout.readline().strip(), "ok")
@@ -78,10 +81,13 @@ class TestConnect(unittest.TestCase):
             raw.close()
             con = db.connect()
             try:
-                self.assertEqual(con.execute("SELECT description FROM cve WHERE id='CVE-2021-44228'")
-                                 .fetchone()[0], before)
-                self.assertEqual(con.execute("SELECT count(*) FROM cve WHERE description LIKE '%CLOBBERED'")
-                                 .fetchone()[0], 0)
+                self.assertEqual(
+                    con.execute("SELECT description FROM cve WHERE id='CVE-2021-44228'").fetchone()[0], before
+                )
+                self.assertEqual(
+                    con.execute("SELECT count(*) FROM cve WHERE description LIKE '%CLOBBERED'").fetchone()[0],
+                    0,
+                )
             finally:
                 con.close()
             self.assertFalse(journal.exists())
@@ -90,7 +96,7 @@ class TestConnect(unittest.TestCase):
                 proc.kill()
 
     def test_recover_journal_ignores_missing_and_readonly(self):
-        db.recover_journal(DB)                                  # no journal: no-op
+        db.recover_journal(DB)  # no journal: no-op
         db.recover_journal(pathlib.Path(tempfile.mkdtemp()) / "nope.db")
 
 
@@ -112,8 +118,12 @@ class TestMCPConnection(unittest.TestCase):
         env = dict(os.environ, CROWBAR_HOME=str(cls.home))
         cls.proc = subprocess.Popen(
             [sys.executable, str(support.ROOT / "mcp" / "server.py")],
-            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            text=True, env=env)
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env=env,
+        )
         cls.n = 0
         cls.request("initialize", {"protocolVersion": "2025-06-18"})
 
@@ -171,8 +181,14 @@ class TestMCPInProcess(unittest.TestCase):
     def call(self, cid="CVE-2021-44228") -> dict:
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
-            mcp.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
-                        "params": {"name": "cb_cve", "arguments": {"id": cid}}})
+            mcp.handle(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {"name": "cb_cve", "arguments": {"id": cid}},
+                }
+            )
         return json.loads(out.getvalue())["result"]
 
     def test_connection_is_reused(self):
@@ -184,23 +200,29 @@ class TestMCPInProcess(unittest.TestCase):
     def sql(self, q) -> dict:
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
-            mcp.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
-                        "params": {"name": "cb_sql", "arguments": {"query": q}}})
+            mcp.handle(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {"name": "cb_sql", "arguments": {"query": q}},
+                }
+            )
         return json.loads(json.loads(out.getvalue())["result"]["content"][0]["text"])
 
     def test_pragma_does_not_stick(self):
         like = "select 'Log4J' like 'log4j' AS x"
         self.assertEqual(self.sql(like), [{"x": 1}])
         self.sql("pragma case_sensitive_like=1")
-        self.assertEqual(self.sql(like), [{"x": 1}])   # a fresh connection, default LIKE again
+        self.assertEqual(self.sql(like), [{"x": 1}])  # a fresh connection, default LIKE again
 
     def test_database_error_drops_connection(self):
         key = mcp.connection() and mcp._con[1]
-        broken = sqlite3.connect(":memory:")     # no tables: every tool raises OperationalError
+        broken = sqlite3.connect(":memory:")  # no tables: every tool raises OperationalError
         broken.row_factory = sqlite3.Row
         mcp._con[0] = broken
         res = self.call()
-        self.assertTrue(res["isError"])   # no tables: schema check or OperationalError
+        self.assertTrue(res["isError"])  # no tables: schema check or OperationalError
         self.assertIsNone(mcp._con[0])
         res = self.call()
         self.assertFalse(res.get("isError"), res)
@@ -208,11 +230,22 @@ class TestMCPInProcess(unittest.TestCase):
 
 
 # ------------------------------------------------------------ FTS top-N search
-WORDS = ("remote code execution buffer overflow heap stack nginx apache log4j openssh kernel "
-         "privilege escalation cross site scripting sql injection deserialization race "
-         "condition type confusion use after free windows linux ios php java wordpress").split()
-QUERIES = ["kernel", "remote code execution", "nginx overflow", "sql injection wordpress",
-           "log4j", "heap", "ios kernel", "kernel zzzznotaword", "deserialization java"]
+WORDS = (
+    "remote code execution buffer overflow heap stack nginx apache log4j openssh kernel "
+    "privilege escalation cross site scripting sql injection deserialization race "
+    "condition type confusion use after free windows linux ios php java wordpress"
+).split()
+QUERIES = [
+    "kernel",
+    "remote code execution",
+    "nginx overflow",
+    "sql injection wordpress",
+    "log4j",
+    "heap",
+    "ios kernel",
+    "kernel zzzznotaword",
+    "deserialization java",
+]
 
 
 def synth_db(path: pathlib.Path, n: int) -> pathlib.Path:
@@ -224,8 +257,26 @@ def synth_db(path: pathlib.Path, n: int) -> pathlib.Path:
         y, cid = 2002 + i % 24, f"CVE-{2002 + i % 24}-{10000 + i}"
         desc = " ".join(rnd.choice(WORDS) for _ in range(rnd.randint(6, 20)))
         kev, epss, ex = int(rnd.random() < 0.01), round(rnd.random() ** 4, 4), int(rnd.random() < 0.05)
-        cves.append((cid, f"{y}-01-01", f"{y}-02-01", "Analyzed", desc, 7.0, "3.1", "", "HIGH",
-                     kev, epss, epss * 100, ex, 0, 0, y))
+        cves.append(
+            (
+                cid,
+                f"{y}-01-01",
+                f"{y}-02-01",
+                "Analyzed",
+                desc,
+                7.0,
+                "3.1",
+                "",
+                "HIGH",
+                kev,
+                epss,
+                epss * 100,
+                ex,
+                0,
+                0,
+                y,
+            )
+        )
         fts.append((cid, desc, "p"))
         meta.append((cid, y, y, rnd.randint(0, 4) if rnd.random() < 0.1 else 0))
         if ex:
@@ -244,20 +295,31 @@ def synth_db(path: pathlib.Path, n: int) -> pathlib.Path:
 def reference_search(con, q: str, limit: int = 20, offset: int = 0) -> list[str]:
     """The pre-r1 relevance path: bm25 + per-row subqueries over every FTS match."""
     fq, toks = query.fts_query(q)
-    sql = ("SELECT c.*, (SELECT count(*) FROM cve_exploit x WHERE x.cve_id=c.id) AS exploits,"
-           " (SELECT count(*) FROM cve_nuclei n WHERE n.cve_id=c.id) AS nuclei_count,"
-           " (SELECT coalesce(poc_count,0) FROM cve_meta m WHERE m.cve_id=c.id) AS poc_count,"
-           " bm25(cve_fts) AS rank FROM cve_fts JOIN cve c ON c.id = cve_fts.id"
-           " WHERE cve_fts MATCH ? ORDER BY rank LIMIT ?")
+    sql = (
+        "SELECT c.*, (SELECT count(*) FROM cve_exploit x WHERE x.cve_id=c.id) AS exploits,"
+        " (SELECT count(*) FROM cve_nuclei n WHERE n.cve_id=c.id) AS nuclei_count,"
+        " (SELECT coalesce(poc_count,0) FROM cve_meta m WHERE m.cve_id=c.id) AS poc_count,"
+        " bm25(cve_fts) AS rank FROM cve_fts JOIN cve c ON c.id = cve_fts.id"
+        " WHERE cve_fts MATCH ? ORDER BY rank LIMIT ?"
+    )
     pool = min(max(300, (offset + limit) * 8), 2000)
     rows = con.execute(sql, [fq, pool]).fetchall()
     if not rows and len(toks) > 1:
         rows = con.execute(sql, [f'"{max(toks, key=len)}"*', pool]).fetchall()
     top = max([abs(r["rank"]) for r in rows] or [1.0]) or 1.0
-    scored = [(10.0 * abs(r["rank"]) / top + 4.0 * r["kev"] + 5.0 * (r["epss"] or 0)
-               + 1.5 * min(r["exploits"], 3) + 1.0 * min(r["poc_count"] or 0, 3), r) for r in rows]
+    scored = [
+        (
+            10.0 * abs(r["rank"]) / top
+            + 4.0 * r["kev"]
+            + 5.0 * (r["epss"] or 0)
+            + 1.5 * min(r["exploits"], 3)
+            + 1.0 * min(r["poc_count"] or 0, 3),
+            r,
+        )
+        for r in rows
+    ]
     scored.sort(key=lambda pair: -pair[0])
-    return [r["id"] for _, r in scored][offset:offset + limit]
+    return [r["id"] for _, r in scored][offset : offset + limit]
 
 
 class TestSearchTopN(unittest.TestCase):
@@ -290,7 +352,7 @@ class TestSearchTopN(unittest.TestCase):
         con.set_trace_callback(None)
         sql = next(s for s in seen if "MATCH" in s)
         plan = [r[3] for r in con.execute("EXPLAIN QUERY PLAN " + sql)]
-        self.assertIn("CO-ROUTINE f", plan)              # FTS top-N feeds the join
+        self.assertIn("CO-ROUTINE f", plan)  # FTS top-N feeds the join
         self.assertTrue(any("SEARCH c USING INDEX" in p for p in plan), plan)
         # any filter leaves the single-query path; results must still come back
         self.assertTrue(query.search(con, "kernel", kev=True))
@@ -300,8 +362,9 @@ class TestSearchTopN(unittest.TestCase):
     def test_filtered_results_unchanged(self):
         con = sqlite3.connect(db.ro_uri(DB), uri=True)
         con.row_factory = sqlite3.Row
-        self.assertEqual([r["id"] for r in query.search(con, "remote", kev=True)],
-                         ["CVE-2021-44228", "CVE-2017-0144"])
+        self.assertEqual(
+            [r["id"] for r in query.search(con, "remote", kev=True)], ["CVE-2021-44228", "CVE-2017-0144"]
+        )
         con.close()
 
 

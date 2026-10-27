@@ -1,4 +1,5 @@
 """MCP stdio server. Zero dependencies; calls the query layer directly."""
+
 from __future__ import annotations
 
 from crowbar import __version__
@@ -32,13 +33,16 @@ def fit_response(result) -> tuple[str, bool]:
     }
     return json.dumps(notice, indent=2), True
 
+
 TOOLS = [
     {
         "name": "cb_search",
-        "description": ("Full-text search across every CVE (2002-today). Ranked by relevance "
-                        "blended with CISA KEV, EPSS and public-exploit availability. Filters: "
-                        "kev, exploit, min_epss, min_cvss, severity, year, since, cwe, product, "
-                        "vendor, ssvc, poc."),
+        "description": (
+            "Full-text search across every CVE (2002-today). Ranked by relevance "
+            "blended with CISA KEV, EPSS and public-exploit availability. Filters: "
+            "kev, exploit, min_epss, min_cvss, severity, year, since, cwe, product, "
+            "vendor, ssvc, poc."
+        ),
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -61,209 +65,317 @@ TOOLS = [
             },
         },
         "fn": lambda con, a: query.search(
-            con, a.get("query", ""), limit=a.get("limit", 15),
-            offset=a.get("offset", 0), sort=a.get("sort", "relevance"),
-            kev=bool(a.get("kev")), exploit=bool(a.get("exploit")),
-            epss=a.get("min_epss"), cvss=a.get("min_cvss"), severity=a.get("severity"),
-            year=a.get("year"), since=a.get("since"), cwe=a.get("cwe"),
-            product=a.get("product"), vendor=a.get("vendor"), ssvc=a.get("ssvc"),
-            poc=bool(a.get("poc"))),
+            con,
+            a.get("query", ""),
+            limit=a.get("limit", 15),
+            offset=a.get("offset", 0),
+            sort=a.get("sort", "relevance"),
+            kev=bool(a.get("kev")),
+            exploit=bool(a.get("exploit")),
+            epss=a.get("min_epss"),
+            cvss=a.get("min_cvss"),
+            severity=a.get("severity"),
+            year=a.get("year"),
+            since=a.get("since"),
+            cwe=a.get("cwe"),
+            product=a.get("product"),
+            vendor=a.get("vendor"),
+            ssvc=a.get("ssvc"),
+            poc=bool(a.get("poc")),
+        ),
     },
     {
         "name": "cb_cve",
-        "description": ("One CVE in full: CVSS, EPSS, KEV, CWE, CPE version ranges, references, "
-                        "Exploit-DB / Nuclei / Metasploit hits, SSVC decision points."),
-        "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}},
-                        "required": ["id"]},
+        "description": (
+            "One CVE in full: CVSS, EPSS, KEV, CWE, CPE version ranges, references, "
+            "Exploit-DB / Nuclei / Metasploit hits, SSVC decision points."
+        ),
+        "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"]},
         "fn": lambda con, a: query.get_cve(con, a["id"]),
     },
     {
         "name": "cb_product",
-        "description": ("CVEs affecting a product/vendor. Pass version to test NVD CPE version "
-                        "ranges, e.g. {name: nginx, version: 1.18.0}."),
+        "description": (
+            "CVEs affecting a product/vendor. Pass version to test NVD CPE version "
+            "ranges, e.g. {name: nginx, version: 1.18.0}."
+        ),
         "inputSchema": {
             "type": "object",
-            "properties": {"name": {"type": "string"},
-                           "version": {"type": "string"},
-                           "limit": {"type": "integer", "minimum": 1, "maximum": 200, "default": 25}},
+            "properties": {
+                "name": {"type": "string"},
+                "version": {"type": "string"},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 200, "default": 25},
+            },
             "required": ["name"],
         },
-        "fn": lambda con, a: query.products(con, a["name"], a.get("version"),
-                                       a.get("limit", 25)),
+        "fn": lambda con, a: query.products(con, a["name"], a.get("version"), a.get("limit", 25)),
     },
     {
         "name": "cb_trending",
-        "description": ("CVEs people are posting about right now, ranked by how many distinct places "
-                        "name them (Hacker News, oss-security, Full Disclosure, ZDI, Mastodon, ENISA "
-                        "EUVD exploited) with KEV/EPSS/CVSS beside each."),
-        "inputSchema": {"type": "object", "properties": {
-            "days": {"type": "number", "minimum": 1, "maximum": 365, "default": 7},
-            "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 25}}},
+        "description": (
+            "CVEs people are posting about right now, ranked by how many distinct places "
+            "name them (Hacker News, oss-security, Full Disclosure, ZDI, Mastodon, ENISA "
+            "EUVD exploited) with KEV/EPSS/CVSS beside each."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "days": {"type": "number", "minimum": 1, "maximum": 365, "default": 7},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 25},
+            },
+        },
         "fn": lambda con, a: query.trending(con, a.get("days", 7), a.get("limit", 25)),
     },
     {
         "name": "cb_new",
-        "description": ("What changed since a date (default 7 days): CISA KEV and ENISA exploited "
-                        "additions, newly published CVEs (KEV > EPSS > CVSS first), new public PoCs. "
-                        "Each part has `total` and the top `rows`."),
-        "inputSchema": {"type": "object", "properties": {
-            "since": {"type": "string", "description": "YYYY-MM-DD"},
-            "days": {"type": "number", "minimum": 1, "maximum": 365, "default": 7},
-            "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 10}}},
+        "description": (
+            "What changed since a date (default 7 days): CISA KEV and ENISA exploited "
+            "additions, newly published CVEs (KEV > EPSS > CVSS first), new public PoCs. "
+            "Each part has `total` and the top `rows`."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "since": {"type": "string", "description": "YYYY-MM-DD"},
+                "days": {"type": "number", "minimum": 1, "maximum": 365, "default": 7},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 10},
+            },
+        },
         "fn": lambda con, a: query.new_since(con, a.get("since"), a.get("days", 7), a.get("limit", 10)),
     },
     {
         "name": "cb_kev",
         "description": "CISA Known Exploited Vulnerabilities catalog.",
-        "inputSchema": {"type": "object", "properties": {
-            "query": {"type": "string"},
-            "limit": {"type": "integer", "minimum": 1, "maximum": 200, "default": 25}}},
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string"},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 200, "default": 25},
+            },
+        },
         "fn": lambda con, a: query.kev_list(con, a.get("query"), a.get("limit", 25)),
     },
     {
         "name": "cb_exploit",
-        "description": ("Search the Exploit-DB index (46k entries), offline. To download the "
-                        "source for a numeric id, use the CLI: `crowbar exploit <id>`. Nothing is executed."),
-        "inputSchema": {"type": "object", "properties": {
-            "query": {"type": "string"},
-            "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 20}},
-            "required": ["query"]},
+        "description": (
+            "Search the Exploit-DB index (46k entries), offline. To download the "
+            "source for a numeric id, use the CLI: `crowbar exploit <id>`. Nothing is executed."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string"},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 20},
+            },
+            "required": ["query"],
+        },
         "fn": lambda con, a: query.exploit_lookup(con, a["query"])
-                         if a["query"].isdigit()
-                         else query.exploit_search(con, a["query"], a.get("limit", 20)),
+        if a["query"].isdigit()
+        else query.exploit_search(con, a["query"], a.get("limit", 20)),
     },
     {
         "name": "cb_nuclei",
         "description": "Search Nuclei templates; returns YAML paths for exact matchers.",
-        "inputSchema": {"type": "object", "properties": {
-            "query": {"type": "string"},
-            "domain": {"type": "string"},
-            "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 20}},
-            "required": ["query"]},
-        "fn": lambda con, a: query.nuclei_search(con, a["query"], a.get("limit", 20),
-                                            a.get("domain")),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string"},
+                "domain": {"type": "string"},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 20},
+            },
+            "required": ["query"],
+        },
+        "fn": lambda con, a: query.nuclei_search(con, a["query"], a.get("limit", 20), a.get("domain")),
     },
     {
         "name": "cb_msf",
         "description": "Search Metasploit module paths.",
-        "inputSchema": {"type": "object", "properties": {
-            "query": {"type": "string"},
-            "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 30}},
-            "required": ["query"]},
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string"},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 30},
+            },
+            "required": ["query"],
+        },
         "fn": lambda con, a: query.msf_search(con, a["query"], a.get("limit", 30)),
     },
     {
         "name": "cb_models",
         "description": "LLM catalog: context window, price per M tokens, capabilities.",
-        "inputSchema": {"type": "object", "properties": {
-            "query": {"type": "string"}, "provider": {"type": "string"},
-            "limit": {"type": "integer", "minimum": 1, "maximum": 200, "default": 40}}},
-        "fn": lambda con, a: query.models_list(con, a.get("query"), a.get("provider"),
-                                          a.get("limit", 40)),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string"},
+                "provider": {"type": "string"},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 200, "default": 40},
+            },
+        },
+        "fn": lambda con, a: query.models_list(con, a.get("query"), a.get("provider"), a.get("limit", 40)),
     },
     {
         "name": "cb_attack",
         "description": "MITRE ATT&CK technique lookup (enterprise, mobile, ics).",
-        "inputSchema": {"type": "object", "properties": {
-            "query": {"type": "string"}, "domain": {"type": "string"},
-            "limit": {"type": "integer", "minimum": 1, "maximum": 50, "default": 10}},
-            "required": ["query"]},
-        "fn": lambda con, a: query.attack_lookup(con, a["query"], a.get("limit", 10),
-                                            a.get("domain")),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string"},
+                "domain": {"type": "string"},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 50, "default": 10},
+            },
+            "required": ["query"],
+        },
+        "fn": lambda con, a: query.attack_lookup(con, a["query"], a.get("limit", 10), a.get("domain")),
     },
     {
         "name": "cb_cwe",
         "description": "CWE definitions (id or keyword).",
-        "inputSchema": {"type": "object", "properties": {
-            "query": {"type": "string"},
-            "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 20}}},
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string"},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 20},
+            },
+        },
         "fn": lambda con, a: query.cwe_get(con, a.get("query"), a.get("limit", 20)),
     },
     {
         "name": "cb_os",
-        "description": ("Vendor OS advisories: Windows (MSRC Security Update Guide) and Apple "
-                        "iOS/iPadOS/macOS security releases. Filter by platform, impact (RCE, "
-                        "EoP, DoS, InfoDisclosure, Spoofing, Bypass) or exploited."),
-        "inputSchema": {"type": "object", "properties": {
-            "query": {"type": "string"},
-            "platform": {"type": "string", "enum": ["windows", "ios", "macos", "apple"]},
-            "impact": {"type": "string"},
-            "exploited": {"type": "boolean"},
-            "since": {"type": "string"},
-            "limit": {"type": "integer", "minimum": 1, "maximum": 200, "default": 40}}},
-        "fn": lambda con, a: query.os_search(con, a.get("query"), a.get("platform"),
-                                        a.get("impact"), bool(a.get("exploited")),
-                                        a.get("since"), a.get("limit", 40)),
+        "description": (
+            "Vendor OS advisories: Windows (MSRC Security Update Guide) and Apple "
+            "iOS/iPadOS/macOS security releases. Filter by platform, impact (RCE, "
+            "EoP, DoS, InfoDisclosure, Spoofing, Bypass) or exploited."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string"},
+                "platform": {"type": "string", "enum": ["windows", "ios", "macos", "apple"]},
+                "impact": {"type": "string"},
+                "exploited": {"type": "boolean"},
+                "since": {"type": "string"},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 200, "default": 40},
+            },
+        },
+        "fn": lambda con, a: query.os_search(
+            con,
+            a.get("query"),
+            a.get("platform"),
+            a.get("impact"),
+            bool(a.get("exploited")),
+            a.get("since"),
+            a.get("limit", 40),
+        ),
     },
     {
         "name": "cb_advisory",
-        "description": ("OSV/GHSA advisories with introduced/fixed version ranges. Filter by "
-                        "ecosystem (npm, PyPI, Go, Maven, NuGet, RubyGems, crates.io, Packagist, "
-                        "Debian, Alpine) or exact package name."),
-        "inputSchema": {"type": "object", "properties": {
-            "query": {"type": "string"}, "ecosystem": {"type": "string"},
-            "package": {"type": "string"},
-            "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 30}}},
-        "fn": lambda con, a: query.advisory_search(con, a.get("query"), a.get("ecosystem"),
-                                              a.get("package"), a.get("limit", 30)),
+        "description": (
+            "OSV/GHSA advisories with introduced/fixed version ranges. Filter by "
+            "ecosystem (npm, PyPI, Go, Maven, NuGet, RubyGems, crates.io, Packagist, "
+            "Debian, Alpine) or exact package name."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string"},
+                "ecosystem": {"type": "string"},
+                "package": {"type": "string"},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 30},
+            },
+        },
+        "fn": lambda con, a: query.advisory_search(
+            con, a.get("query"), a.get("ecosystem"), a.get("package"), a.get("limit", 30)
+        ),
     },
     {
         "name": "cb_code",
         "description": "Full-text search inside Exploit-DB source code; returns path + snippet.",
-        "inputSchema": {"type": "object", "properties": {
-            "query": {"type": "string"},
-            "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 20}},
-            "required": ["query"]},
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string"},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 20},
+            },
+            "required": ["query"],
+        },
         "fn": lambda con, a: query.code_search(con, a["query"], a.get("limit", 20)),
     },
     {
         "name": "cb_binary",
-        "description": ("Living-off-the-land binary abuse: GTFOBins (unix), LOLBAS (windows), "
-                        "PayloadsAllTheThings (web payloads)."),
-        "inputSchema": {"type": "object", "properties": {
-            "query": {"type": "string"},
-            "source": {"type": "string", "enum": ["gtfobins", "lolbas", "payloads"]},
-            "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 25}},
-            "required": ["query"]},
-        "fn": lambda con, a: query.toolkit_search(con, a["query"], a.get("source"),
-                                             a.get("limit", 25)),
+        "description": (
+            "Living-off-the-land binary abuse: GTFOBins (unix), LOLBAS (windows), "
+            "PayloadsAllTheThings (web payloads)."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string"},
+                "source": {"type": "string", "enum": ["gtfobins", "lolbas", "payloads"]},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 25},
+            },
+            "required": ["query"],
+        },
+        "fn": lambda con, a: query.toolkit_search(con, a["query"], a.get("source"), a.get("limit", 25)),
     },
     {
         "name": "cb_debian",
         "description": "Debian security tracker: per-release status and fixed version for a package.",
-        "inputSchema": {"type": "object", "properties": {
-            "package": {"type": "string"}, "cve": {"type": "string"},
-            "limit": {"type": "integer", "minimum": 1, "maximum": 500, "default": 50}},
-            "required": ["package"]},
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "package": {"type": "string"},
+                "cve": {"type": "string"},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 500, "default": 50},
+            },
+            "required": ["package"],
+        },
         "fn": lambda con, a: query.debian_lookup(con, a["package"], a.get("cve"), a.get("limit", 50)),
     },
     {
         "name": "cb_poc",
-        "description": ("Public GitHub PoC repositories (PoC-in-GitHub metadata). Never "
-                        "executed. Filter by CVE, language or minimum stars, or list the "
-                        "CVEs with the most PoCs."),
-        "inputSchema": {"type": "object", "properties": {
-            "query": {"type": "string"},
-            "cve": {"type": "string"},
-            "language": {"type": "string"},
-            "min_stars": {"type": "integer", "minimum": 0, "default": 0},
-            "top": {"type": "boolean", "description": "CVEs ranked by PoC count"},
-            "limit": {"type": "integer", "minimum": 1, "maximum": 200, "default": 25}}},
-        "fn": lambda con, a: (query.poc_cves(con, a.get("limit", 25))
-                         if a.get("top")
-                         else query.poc_search(con, a.get("query", ""), cve=a.get("cve"),
-                                               language=a.get("language"),
-                                               min_stars=a.get("min_stars", 0),
-                                               limit=a.get("limit", 25))),
+        "description": (
+            "Public GitHub PoC repositories (PoC-in-GitHub metadata). Never "
+            "executed. Filter by CVE, language or minimum stars, or list the "
+            "CVEs with the most PoCs."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string"},
+                "cve": {"type": "string"},
+                "language": {"type": "string"},
+                "min_stars": {"type": "integer", "minimum": 0, "default": 0},
+                "top": {"type": "boolean", "description": "CVEs ranked by PoC count"},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 200, "default": 25},
+            },
+        },
+        "fn": lambda con, a: (
+            query.poc_cves(con, a.get("limit", 25))
+            if a.get("top")
+            else query.poc_search(
+                con,
+                a.get("query", ""),
+                cve=a.get("cve"),
+                language=a.get("language"),
+                min_stars=a.get("min_stars", 0),
+                limit=a.get("limit", 25),
+            )
+        ),
     },
     {
         "name": "cb_sources",
-        "description": ("Source provenance: which upstream source filled the index, its URL, "
-                        "license, SHA-256, load time and row count."),
+        "description": (
+            "Source provenance: which upstream source filled the index, its URL, "
+            "license, SHA-256, load time and row count."
+        ),
         "inputSchema": {"type": "object", "properties": {}},
-        "fn": lambda con, a: [dict(r) for r in con.execute(
-            "SELECT source, url, license, sha256, fetched_at, loaded_at, record_count, "
-            "status, note FROM source_state ORDER BY source")],
+        "fn": lambda con, a: [
+            dict(r)
+            for r in con.execute(
+                "SELECT source, url, license, sha256, fetched_at, loaded_at, record_count, "
+                "status, note FROM source_state ORDER BY source"
+            )
+        ],
     },
     {
         "name": "cb_tables",
@@ -273,27 +385,37 @@ TOOLS = [
     },
     {
         "name": "cb_sql",
-        "description": ("Read-only SQL. Tables: cve, cve_cwe, cve_product, cpe_match, cve_ref, "
-                        "cve_exploit, cve_nuclei, cve_msf, kev, exploit, shellcode, nuclei, msf, "
-                        "attack, cwe, capec, model, ssvc, advisory, package_range, debian, "
-                        "os_advisory, toolkit, cve_cna, cve_meta, poc, poc_orphan, "
-                        "cve_alias, source_state, exploit_code_fts, toolkit_fts, meta."),
-        "inputSchema": {"type": "object", "properties": {
-            "query": {"type": "string"},
-            "limit": {"type": "integer", "minimum": 1, "maximum": 1000, "default": 100}},
-            "required": ["query"]},
+        "description": (
+            "Read-only SQL. Tables: cve, cve_cwe, cve_product, cpe_match, cve_ref, "
+            "cve_exploit, cve_nuclei, cve_msf, kev, exploit, shellcode, nuclei, msf, "
+            "attack, cwe, capec, model, ssvc, advisory, package_range, debian, "
+            "os_advisory, toolkit, cve_cna, cve_meta, poc, poc_orphan, "
+            "cve_alias, source_state, exploit_code_fts, toolkit_fts, meta."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string"},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 1000, "default": 100},
+            },
+            "required": ["query"],
+        },
         "fn": lambda con, a: query.sql_readonly(con, a["query"], a.get("limit", 100)),
     },
     {
         "name": "cb_stats",
-        "description": ("Corpus health and freshness. `index.age_days` is days since the last "
-                        "update; `index.stale` means older than the 8-day NVD change window, so "
-                        "recent CVEs may be missing or outdated - say so and run `crowbar update`. "
-                        "`index.last_error` is why the last background update failed."),
+        "description": (
+            "Corpus health and freshness. `index.age_days` is days since the last "
+            "update; `index.stale` means older than the 8-day NVD change window, so "
+            "recent CVEs may be missing or outdated - say so and run `crowbar update`. "
+            "`index.last_error` is why the last background update failed."
+        ),
         "inputSchema": {"type": "object", "properties": {}},
         # the per-dataset freshness map is large; index_status() is the summary agents need
-        "fn": lambda con, a: {**{k: v for k, v in query.stats(con).items() if k != "freshness"},
-                              "index": datasets.index_status()},
+        "fn": lambda con, a: {
+            **{k: v for k, v in query.stats(con).items() if k != "freshness"},
+            "index": datasets.index_status(),
+        },
     },
 ]
 BY_NAME = {t["name"]: t for t in TOOLS}
@@ -332,21 +454,25 @@ def respond(msg_id, result=None, error=None) -> None:
     sys.stdout.flush()
 
 
-
 def handle(req: dict) -> None:
     method, rid = req.get("method"), req.get("id")
     if method == "initialize":
-        respond(rid, {
-            "protocolVersion": req.get("params", {}).get("protocolVersion") or "2025-06-18",
-            "capabilities": {"tools": {"listChanged": False}},
-            "serverInfo": {"name": "crowbar", "version": __version__},
-            "instructions": ("Local vulnerability intelligence: CVEs 2002-today, KEV, EPSS, "
-                             "CPE version ranges, Exploit-DB (index + source code), Nuclei, "
-                             "Metasploit, OSV/GHSA, Debian tracker, MSRC Windows and Apple "
-                             "iOS/macOS advisories, GTFOBins/LOLBAS, ATT&CK, CWE, CAPEC, LLM "
-                             "catalog. Start with cb_stats; use cb_map-equivalent `crowbar map` in CLI "
-                             "for the table map."),
-        })
+        respond(
+            rid,
+            {
+                "protocolVersion": req.get("params", {}).get("protocolVersion") or "2025-06-18",
+                "capabilities": {"tools": {"listChanged": False}},
+                "serverInfo": {"name": "crowbar", "version": __version__},
+                "instructions": (
+                    "Local vulnerability intelligence: CVEs 2002-today, KEV, EPSS, "
+                    "CPE version ranges, Exploit-DB (index + source code), Nuclei, "
+                    "Metasploit, OSV/GHSA, Debian tracker, MSRC Windows and Apple "
+                    "iOS/macOS advisories, GTFOBins/LOLBAS, ATT&CK, CWE, CAPEC, LLM "
+                    "catalog. Start with cb_stats; use cb_map-equivalent `crowbar map` in CLI "
+                    "for the table map."
+                ),
+            },
+        )
         return
     if method in ("notifications/initialized", "notifications/cancelled"):
         return
@@ -354,8 +480,15 @@ def handle(req: dict) -> None:
         respond(rid, {})
         return
     if method == "tools/list":
-        respond(rid, {"tools": [{"name": t["name"], "description": t["description"],
-                                 "inputSchema": t["inputSchema"]} for t in TOOLS]})
+        respond(
+            rid,
+            {
+                "tools": [
+                    {"name": t["name"], "description": t["description"], "inputSchema": t["inputSchema"]}
+                    for t in TOOLS
+                ]
+            },
+        )
         return
     if method == "tools/call":
         params = req.get("params") or {}
@@ -371,13 +504,13 @@ def handle(req: dict) -> None:
         try:
             con = connection()
             err = db.schema_error(con)
-            if err:   # wrong or damaged index: reopen on the next call
+            if err:  # wrong or damaged index: reopen on the next call
                 close_connection()
                 respond(rid, {"content": [{"type": "text", "text": err}], "isError": True})
                 return
             result = tool["fn"](con, args)
             if tool["name"] == "cb_sql" and args["query"].lstrip().lower().startswith("pragma"):
-                close_connection()   # a PRAGMA would otherwise stick for every later call
+                close_connection()  # a PRAGMA would otherwise stick for every later call
             text, over = fit_response(result)
             content = [{"type": "text", "text": text}]
             warn = check_freshness()
@@ -386,11 +519,10 @@ def handle(req: dict) -> None:
             respond(rid, {"content": content, "isError": over})
         except Exception as exc:  # noqa: BLE001
             if isinstance(exc, sqlite3.DatabaseError):
-                close_connection()   # next call reopens (file swapped or damaged under us)
+                close_connection()  # next call reopens (file swapped or damaged under us)
             # Full detail (incl. filesystem paths) to stderr only; the client
             # gets the exception type and a root-redacted message.
-            print(f"crowbar tool {tool['name']} failed:\n{traceback.format_exc()}",
-                  file=sys.stderr)
+            print(f"crowbar tool {tool['name']} failed:\n{traceback.format_exc()}", file=sys.stderr)
             msg = f"{type(exc).__name__}: {exc}".replace(str(paths.ROOT), "<root>")
             respond(rid, {"content": [{"type": "text", "text": msg}], "isError": True})
         return
@@ -398,7 +530,7 @@ def handle(req: dict) -> None:
         respond(rid, error={"code": -32601, "message": f"method not found: {method}"})
 
 
-_con: list = [None, None]   # connection, (inode, mtime_ns) of the file it opened
+_con: list = [None, None]  # connection, (inode, mtime_ns) of the file it opened
 
 
 def connection() -> sqlite3.Connection:
@@ -438,8 +570,10 @@ def check_freshness() -> str | None:
     if not s["stale"]:
         return None
     err = f"; last update failed: {s['last_error']['error']}" if s["last_error"] else ""
-    return (f"note: the crowbar index is {s['age_days']} days old{err}. CVEs published or "
-            f"changed since then may be missing - tell the user and suggest `crowbar update`.")
+    return (
+        f"note: the crowbar index is {s['age_days']} days old{err}. CVEs published or "
+        f"changed since then may be missing - tell the user and suggest `crowbar update`."
+    )
 
 
 def serve() -> None:

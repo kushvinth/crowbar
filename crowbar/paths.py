@@ -1,4 +1,5 @@
 """Path resolution for a relocatable harness (local disk, symlink, or USB drive)."""
+
 from __future__ import annotations
 
 import os

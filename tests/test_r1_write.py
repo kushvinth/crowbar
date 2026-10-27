@@ -43,26 +43,18 @@ class TestRowid(unittest.TestCase):
         self.assertEqual(indexer.fts_rowid("CVE-1999-0001"), 1999_00000001)
         con = sqlite3.connect(":memory:")
         for cid in ("CVE-2021-44228", "CVE-2024-1234567", "CVE-1999-0001"):
-            got = con.execute(
-                f"SELECT {indexer.FTS_ROWID_SQL} FROM (SELECT ? AS id)", (cid,)
-            ).fetchone()[0]
+            got = con.execute(f"SELECT {indexer.FTS_ROWID_SQL} FROM (SELECT ? AS id)", (cid,)).fetchone()[0]
             self.assertEqual(got, indexer.fts_rowid(cid), cid)
 
     def test_duplicate_insert_replaces_instead_of_raising(self):
         con = indexer.create(pathlib.Path(tempfile.mkdtemp(prefix="r1w-")) / "t.db")
         fts = [("CVE-2030-1", "first text", "acme widget")]
         indexer._flush(con, [], [], [], [], [], fts)
-        indexer._flush(
-            con, [], [], [], [], [], [("CVE-2030-1", "second text", "acme widget")]
-        )
+        indexer._flush(con, [], [], [], [], [], [("CVE-2030-1", "second text", "acme widget")])
         self.assertEqual(fts_rows(con), {indexer.fts_rowid("CVE-2030-1"): "CVE-2030-1"})
+        self.assertEqual(con.execute("SELECT description FROM cve_fts").fetchone()[0], "second text")
         self.assertEqual(
-            con.execute("SELECT description FROM cve_fts").fetchone()[0], "second text"
-        )
-        self.assertEqual(
-            con.execute(
-                "SELECT count(*) FROM cve_fts WHERE cve_fts MATCH 'first'"
-            ).fetchone()[0],
+            con.execute("SELECT count(*) FROM cve_fts WHERE cve_fts MATCH 'first'").fetchone()[0],
             0,
         )
         con.close()
@@ -71,15 +63,12 @@ class TestRowid(unittest.TestCase):
 class TestMigration(unittest.TestCase):
     def test_fixture_copy_migrates_once(self):
         con = fresh_copy()
-        con.execute("DELETE FROM meta WHERE key='fts_rowid'")   # an index built before the flag
+        con.execute("DELETE FROM meta WHERE key='fts_rowid'")  # an index built before the flag
         n_cve = con.execute("SELECT count(*) FROM cve").fetchone()[0]
         con.execute(
-            "INSERT INTO cve_fts(id,description,products) "
-            "VALUES ('CVE-2021-44228','log4j newest text','x')"
+            "INSERT INTO cve_fts(id,description,products) VALUES ('CVE-2021-44228','log4j newest text','x')"
         )
-        self.assertEqual(
-            con.execute("SELECT count(*) FROM cve_fts").fetchone()[0], n_cve + 1
-        )
+        self.assertEqual(con.execute("SELECT count(*) FROM cve_fts").fetchone()[0], n_cve + 1)
         self.assertTrue(indexer.migrate_fts_rowids(con))
         self.assertFalse(indexer.migrate_fts_rowids(con))
         self.assertEqual(
@@ -94,12 +83,7 @@ class TestMigration(unittest.TestCase):
             "newest",
         ):  # the newest duplicate survived and is searchable
             self.assertEqual(
-                [
-                    r[0]
-                    for r in con.execute(
-                        "SELECT id FROM cve_fts WHERE cve_fts MATCH ?", (term,)
-                    )
-                ],
+                [r[0] for r in con.execute("SELECT id FROM cve_fts WHERE cve_fts MATCH ?", (term,))],
                 ["CVE-2021-44228"],
             )
         con.close()
@@ -112,14 +96,10 @@ class TestMigration(unittest.TestCase):
             before = {r[0] for r in con.execute("SELECT id FROM cve_fts")}
             indexer.delete_cves(con, ["CVE-2021-44228", "CVE-2017-0144"])
             after = {r[0] for r in con.execute("SELECT id FROM cve_fts")}
-            self.assertEqual(
-                before - after, {"CVE-2021-44228", "CVE-2017-0144"}, migrated
-            )
+            self.assertEqual(before - after, {"CVE-2021-44228", "CVE-2017-0144"}, migrated)
             self.assertEqual(after, {r[0] for r in con.execute("SELECT id FROM cve")})
             self.assertEqual(
-                con.execute(
-                    "SELECT count(*) FROM cve_nuclei WHERE cve_id='CVE-2021-44228'"
-                ).fetchone()[0],
+                con.execute("SELECT count(*) FROM cve_nuclei WHERE cve_id='CVE-2021-44228'").fetchone()[0],
                 1,
             )
             con.close()
@@ -129,28 +109,21 @@ class TestMigration(unittest.TestCase):
         indexer.migrate_fts_rowids(con)
 
         def plan(sql):
-            return " ".join(
-                r[-1] for r in con.execute("EXPLAIN QUERY PLAN " + sql, (1, 2))
-            )
+            return " ".join(r[-1] for r in con.execute("EXPLAIN QUERY PLAN " + sql, (1, 2)))
 
         by_id, by_rowid = (
             plan("DELETE FROM cve_fts WHERE id IN (?,?)"),
             plan("DELETE FROM cve_fts WHERE rowid IN (?,?)"),
         )
         self.assertNotEqual(by_id, by_rowid)
-        self.assertTrue(
-            by_rowid.endswith("="), by_rowid
-        )  # FTS5 idxStr '=': rowid equality lookup
+        self.assertTrue(by_rowid.endswith("="), by_rowid)  # FTS5 idxStr '=': rowid equality lookup
         con.close()
 
 
 class TestEpss(unittest.TestCase):
     def test_apply_epss_skips_equal_rows(self):
         con = fresh_copy()
-        cur = {
-            r[0]: (r[1], r[2])
-            for r in con.execute("SELECT id, epss, epss_pct FROM cve")
-        }
+        cur = {r[0]: (r[1], r[2]) for r in con.execute("SELECT id, epss, epss_pct FROM cve")}
         t = con.total_changes
         indexer.apply_epss(con, cur)
         self.assertEqual(con.total_changes - t, len(cur))  # the temp-table inserts only
@@ -189,13 +162,9 @@ class TestOneTxn(unittest.TestCase):
         )
         proxy.commit()
         self.assertTrue(con.in_transaction)
-        self.assertEqual(
-            [r[0] for r in proxy.execute("SELECT a FROM t")], ["a;b", 2, 3]
-        )
+        self.assertEqual([r[0] for r in proxy.execute("SELECT a FROM t")], ["a;b", 2, 3])
         con.execute("ROLLBACK")
-        self.assertEqual(
-            con.execute("SELECT count(*) FROM sqlite_master").fetchone()[0], 0
-        )
+        self.assertEqual(con.execute("SELECT count(*) FROM sqlite_master").fetchone()[0], 0)
 
 
 class TestUpdate(unittest.TestCase):
@@ -246,9 +215,7 @@ class TestUpdate(unittest.TestCase):
             con.execute("SELECT count(*) FROM cve_fts").fetchone()[0],
             con.execute("SELECT count(*) FROM cve").fetchone()[0],
         )
-        self.assertEqual(
-            fts_rows(con), {indexer.fts_rowid(c): c for c in fts_rows(con).values()}
-        )
+        self.assertEqual(fts_rows(con), {indexer.fts_rowid(c): c for c in fts_rows(con).values()})
         con.close()
         self.assertFalse(self.db.with_suffix(".db.tmp").exists())
         self.assertFalse(self.db.with_name("crowbar.db-journal").exists())
@@ -281,15 +248,11 @@ class TestUpdate(unittest.TestCase):
             self.assertRaisesRegex(RuntimeError, "boom"),
         ):
             indexer.update()
-        self.assertEqual(
-            self.dump(), before
-        )  # EPSS + fts renumber ran before the failure: rolled back
+        self.assertEqual(self.dump(), before)  # EPSS + fts renumber ran before the failure: rolled back
         self.assertFalse(self.db.with_name("crowbar.db-journal").exists())
         self.assertFalse(self.db.with_suffix(".db.tmp").exists())
         with mock.patch.object(indexer, "_clone", return_value=False):
-            self.check_updated(
-                indexer.update()
-            )  # the next run succeeds on the same file
+            self.check_updated(indexer.update())  # the next run succeeds on the same file
 
 
 if __name__ == "__main__":

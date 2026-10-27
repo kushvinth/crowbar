@@ -1,4 +1,5 @@
 """SQLite helpers: read-only connections, metadata, schema version."""
+
 from __future__ import annotations
 
 import sqlite3
@@ -17,7 +18,7 @@ def connect(readonly: bool = True) -> sqlite3.Connection:
         recover_journal(paths.DB)
         con = sqlite3.connect(ro_uri(paths.DB), uri=True, timeout=30)
         con.execute("PRAGMA query_only=ON")
-        con.execute("PRAGMA mmap_size=268435456")   # per-connection read speedups, safe read-only
+        con.execute("PRAGMA mmap_size=268435456")  # per-connection read speedups, safe read-only
         con.execute("PRAGMA cache_size=-65536")
     else:
         con = sqlite3.connect(paths.DB, timeout=60)
@@ -69,9 +70,13 @@ def meta(con: sqlite3.Connection) -> dict:
 
 
 def counts(con: sqlite3.Connection) -> dict:
-    tables = [r[0] for r in con.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' "
-        "AND name NOT LIKE '%_fts%' AND name NOT LIKE 'sqlite_%' ORDER BY name")]
+    tables = [
+        r[0]
+        for r in con.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' "
+            "AND name NOT LIKE '%_fts%' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+        )
+    ]
     return {t: con.execute(f"SELECT count(*) FROM {t}").fetchone()[0] for t in tables}
 
 
@@ -80,6 +85,8 @@ CVE_FLAGS = ("cve_with_epss", "cve_kev", "cve_with_exploit", "cve_with_nuclei", 
 
 def flag_counts(con: sqlite3.Connection) -> dict:
     """The cve coverage counts: written to stats.json by build/update, live fallback in stats()."""
-    row = con.execute("SELECT count(epss), coalesce(sum(kev=1),0), coalesce(sum(has_exploit=1),0),"
-                      " coalesce(sum(has_nuclei=1),0), coalesce(sum(has_msf=1),0) FROM cve").fetchone()
+    row = con.execute(
+        "SELECT count(epss), coalesce(sum(kev=1),0), coalesce(sum(has_exploit=1),0),"
+        " coalesce(sum(has_nuclei=1),0), coalesce(sum(has_msf=1),0) FROM cve"
+    ).fetchone()
     return dict(zip(CVE_FLAGS, row))

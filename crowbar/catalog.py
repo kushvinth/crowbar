@@ -3,6 +3,7 @@
 Agents read this instead of guessing where a fact lives. Keep it in sync when a
 dataset or table is added; `crowbar map` renders it together with live status.
 """
+
 from __future__ import annotations
 
 from . import chatter, paths
@@ -16,8 +17,18 @@ GROUPS: dict[str, dict] = {
     },
     "cveorg": {
         "path": "data/intel/cveorg/cvelistV5-main.tar.gz",
-        "tables": ["cve_cna", "cve_cna_ref", "cve_cna_product", "cve", "cve_cwe",
-                   "cve_product", "cve_ref", "cve_fts", "cve_meta", "source_state"],
+        "tables": [
+            "cve_cna",
+            "cve_cna_ref",
+            "cve_cna_product",
+            "cve",
+            "cve_cwe",
+            "cve_product",
+            "cve_ref",
+            "cve_fts",
+            "cve_meta",
+            "source_state",
+        ],
         "commands": ["crowbar cve", "crowbar search", "crowbar sources"],
     },
     "poc": {
