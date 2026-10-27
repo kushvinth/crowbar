@@ -1,6 +1,6 @@
 {
   "name": "crowbar",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Retrieve CVEs and index them inside your codebase.",
   "author": {
     "name": "kushvinth",
